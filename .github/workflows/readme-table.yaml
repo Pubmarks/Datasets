@@ -1,6 +1,11 @@
 name: Update README table
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/python/readme/**
   workflow_run:
     workflows:
       - Stocks history
@@ -15,7 +20,7 @@ permissions:
 jobs:
   update-readme:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
