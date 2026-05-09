@@ -16,3 +16,15 @@ Daily OHLCV data in CSV, combined and per calendar year.
 | INTU | 1993–2026 | [csv](https://pubmarks.github.io/datasets/stocks/INTU/ohlcv.csv) |
 | MSFT | 1986–2026 | [csv](https://pubmarks.github.io/datasets/stocks/MSFT/ohlcv.csv) |
 | RMD | 1995–2026 | [csv](https://pubmarks.github.io/datasets/stocks/RMD/ohlcv.csv) |
+
+## CDN
+
+All files are available via GitHub Pages. 
+
+Use these URLs directly in your scripts or applications - GitHub Pages is a reliable CDN with global edge caching, no auth required, and no rate limits for public data.
+
+Example:
+
+```
+https://pubmarks.github.io/datasets/stocks/AAPL/ohlcv.csv
+```
