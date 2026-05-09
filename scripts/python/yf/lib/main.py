@@ -8,7 +8,13 @@ from pathlib import Path
 
 import click
 
-from lib.csvfmt import append_ohlcv_rows, err, read_last_date, write_ohlcv_csv
+from lib.csvfmt import (
+    append_ohlcv_rows,
+    err,
+    read_last_date,
+    read_ohlcv_rows,
+    write_ohlcv_csv_atomic,
+)
 from lib.ohlcv_fetch import fetch_daily_ohlcv
 from lib.ticker_year import parse_ticker_year
 
@@ -22,7 +28,6 @@ def _repo_root() -> Path:
         return Path(out.decode().strip())
     except subprocess.CalledProcessError:
         pass
-    # Walk up looking for a data/ directory
     here = Path(__file__).resolve().parent
     for parent in [here, *here.parents]:
         if (parent / "data").is_dir():
@@ -30,10 +35,37 @@ def _repo_root() -> Path:
     raise RuntimeError("cannot locate repo root (no git root and no data/ directory found)")
 
 
-def _output_path(root: Path, ticker: str, year: int, year_set: bool) -> Path:
-    if year_set:
-        return root / "data" / "stocks" / ticker / str(year) / "ohlcv.csv"
-    return root / "data" / "stocks" / ticker / "ohlcv.csv"
+def _weekend_cutoff(today: dt.date, base: dt.date) -> dt.date:
+    if today.weekday() == 5:
+        return min(base, today - dt.timedelta(days=1))
+    if today.weekday() == 6:
+        return min(base, today - dt.timedelta(days=2))
+    return base
+
+
+def _sync_year_files(root: Path, ticker: str, all_rows: list) -> None:
+    """Create or incrementally update per-year files from flat file data."""
+    by_year: dict[int, list] = {}
+    for row in all_rows:
+        y = int(row[0][:4])
+        by_year.setdefault(y, []).append(row)
+
+    for year, year_rows in sorted(by_year.items()):
+        year_path = root / "data" / "stocks" / ticker / str(year) / "ohlcv.csv"
+        year_last_d = read_last_date(year_path)
+        flat_year_last_d = dt.date.fromisoformat(year_rows[-1][0])
+
+        if year_last_d == flat_year_last_d:
+            continue
+
+        if year_last_d is None:
+            write_ohlcv_csv_atomic(year_rows, year_path)
+            err(f"wrote {len(year_rows)} row(s) to {year_path}")
+        else:
+            missing = [r for r in year_rows if dt.date.fromisoformat(r[0]) > year_last_d]
+            if missing:
+                append_ohlcv_rows(missing, year_path)
+                err(f"appended {len(missing)} row(s) to {year_path}")
 
 
 def _need_subcommand() -> None:
@@ -58,17 +90,23 @@ def yf(ctx: click.Context) -> None:
 @yf.command(
     "ohlcv",
     context_settings={"show_default": True},
-    help="Download daily OHLCV as CSV and write to data/stocks/TICKER[/YEAR]/ohlcv.csv (Yahoo Finance via yfinance).",
+    help=(
+        "Download daily OHLCV and write to data/stocks/TICKER[/YEAR]/ohlcv.csv. "
+        "Without a year: syncs flat file + all per-year files (one Yahoo call). "
+        "With a year: updates only that year file."
+    ),
 )
 @click.argument("parts", nargs=-1)
 def ohlcv_cmd(parts: tuple[str, ...]) -> None:
     """
     Ticker: TICKER environment variable and/or first argument.
 
-    Year: YEAR environment and/or last argument; a single 4-digit argument sets year only (ticker from env).
+    Year: YEAR environment and/or last argument; a single 4-digit argument sets year
+    only (ticker from env).
 
-    If year is omitted, writes all history to data/stocks/TICKER/ohlcv.csv.
-    If the file already exists, only missing dates at the end are appended.
+    Without a year: flat file (data/stocks/TICKER/ohlcv.csv) is updated first with one
+    Yahoo call, then all per-year files are created or updated locally from the flat
+    file — no additional network calls.
     """
     try:
         ticker, year, year_set = parse_ticker_year(parts)
@@ -82,39 +120,56 @@ def ohlcv_cmd(parts: tuple[str, ...]) -> None:
         err(str(e))
         raise SystemExit(1) from e
 
-    path = _output_path(root, ticker, year, year_set)
-    last_d = read_last_date(path)
-    from_d = last_d + dt.timedelta(days=1) if last_d else None
-
     today = dt.date.today()
-    cutoff = dt.date(year, 12, 31) if year_set else today
-    if today.weekday() == 5:
-        cutoff = min(cutoff, today - dt.timedelta(days=1))
-    elif today.weekday() == 6:
-        cutoff = min(cutoff, today - dt.timedelta(days=2))
-    if from_d and from_d > cutoff:
-        err(f"{path}: already up to date")
-        return
 
-    try:
-        rows = fetch_daily_ohlcv(
-            ticker,
-            year=year if year_set else None,
-            year_set=year_set,
-            from_date=from_d,
-        )
-    except Exception as e:
-        err(str(e))
-        raise SystemExit(1) from e
+    if year_set:
+        # --- explicit year: update only that year file ---
+        path = root / "data" / "stocks" / ticker / str(year) / "ohlcv.csv"
+        last_d = read_last_date(path)
+        from_d = last_d + dt.timedelta(days=1) if last_d else None
+        cutoff = _weekend_cutoff(today, dt.date(year, 12, 31))
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if last_d is None:
-        with path.open("w", newline="") as f:
-            write_ohlcv_csv(rows, f)
+        if from_d and from_d > cutoff:
+            err(f"{path}: already up to date")
+            return
+
+        try:
+            rows = fetch_daily_ohlcv(ticker, year=year, year_set=True, from_date=from_d)
+        except Exception as e:
+            err(str(e))
+            raise SystemExit(1) from e
+
+        if last_d is None:
+            write_ohlcv_csv_atomic(rows, path)
+        else:
+            append_ohlcv_rows(rows, path)
+        err(f"wrote {len(rows)} row(s) to {path}")
+
     else:
-        append_ohlcv_rows(rows, path)
+        # --- no year: update flat file, then sync all year files ---
+        flat_path = root / "data" / "stocks" / ticker / "ohlcv.csv"
+        flat_last_d = read_last_date(flat_path)
+        from_d = flat_last_d + dt.timedelta(days=1) if flat_last_d else None
+        cutoff = _weekend_cutoff(today, today)
 
-    err(f"wrote {len(rows)} row(s) to {path}")
+        if from_d and from_d > cutoff:
+            err(f"{flat_path}: already up to date")
+        else:
+            try:
+                new_rows = fetch_daily_ohlcv(ticker, year=None, year_set=False, from_date=from_d)
+            except Exception as e:
+                err(str(e))
+                raise SystemExit(1) from e
+
+            flat_path.parent.mkdir(parents=True, exist_ok=True)
+            if flat_last_d is None:
+                write_ohlcv_csv_atomic(new_rows, flat_path)
+            else:
+                append_ohlcv_rows(new_rows, flat_path)
+            err(f"wrote {len(new_rows)} row(s) to {flat_path}")
+
+        all_rows = read_ohlcv_rows(flat_path)
+        _sync_year_files(root, ticker, all_rows)
 
 
 def main() -> None:
