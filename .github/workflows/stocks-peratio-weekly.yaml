@@ -1,0 +1,85 @@
+name: Stocks P/E update weekly
+
+on:
+  schedule:
+    - cron: "0 0 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          lfs: true
+
+      - name: Download latest macrotrends release
+        run: |
+          gh release download \
+            $(gh release list --repo ${{ github.repository }} \
+              --json tagName \
+              --jq '[.[] | select(.tagName | startswith("macrotrends-"))] | .[0].tagName') \
+            --repo ${{ github.repository }} \
+            --pattern 'macrotrends' \
+            --output /usr/local/bin/macrotrends
+          chmod +x /usr/local/bin/macrotrends
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refresh P/E for all tickers
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          commit_if_staged() {
+            local msg="$1"
+            if git diff --staged --quiet; then
+              echo "No git changes to commit (${msg})"
+            else
+              git commit -m "$msg"
+              git pull --rebase origin main
+              git push
+            fi
+          }
+
+          ROOT="data/stocks"
+          if [ ! -d "$ROOT" ]; then
+            echo "No ${ROOT}; nothing to update."
+            exit 0
+          fi
+          mapfile -t dirs < <(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | sort)
+          if [ ${#dirs[@]} -eq 0 ]; then
+            echo "No ticker directories under ${ROOT}; nothing to update."
+            exit 0
+          fi
+
+          # sort tickers by last peratio commit timestamp ascending (oldest / never first)
+          pairs=()
+          for dir in "${dirs[@]}"; do
+            ticker=$(basename "$dir" | tr '[:lower:]' '[:upper:]')
+            ts=$(git log -1 --format=%ct -- "${ROOT}/${ticker}/peratio.csv" 2>/dev/null | tr -d '[:space:]')
+            ts=${ts:-0}
+            pairs+=("${ts}|${ticker}")
+          done
+          IFS=$'\n' sorted=($(printf '%s\n' "${pairs[@]}" | sort -t'|' -k1 -n)); unset IFS
+
+          prev_ran=false
+          for pair in "${sorted[@]}"; do
+            ts="${pair%%|*}"
+            ticker="${pair##*|}"
+            if [ "$prev_ran" = true ]; then sleep 10; fi
+            prev_ran=true
+            last_label=$([ "$ts" -gt 0 ] && date -u -d "@$ts" +%Y-%m-%d || echo never)
+            echo "--- ${ticker} (last: ${last_label}) ---"
+            if ! macrotrends peratio --write "$ticker" 2>&1; then
+              echo "::warning::${ticker}: peratio fetch failed, will retry next week"
+            fi
+            git add "${ROOT}/${ticker}"
+            commit_if_staged "chore: ${ticker,,} peratio weekly update"
+          done
