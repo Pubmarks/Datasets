@@ -53,7 +53,7 @@ jobs:
           first=true
           for dir in "${dirs[@]}"; do
             ticker=$(basename "$dir" | tr '[:lower:]' '[:upper:]')
-            [ "$first" = true ] || sleep 3
+            [ "$first" = true ] || sleep 10
             first=false
             echo "--- $ticker ---"
             uv run --project scripts/python/yf --frozen --no-dev -- yf ohlcv "$ticker"
