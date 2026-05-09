@@ -27,7 +27,19 @@ jobs:
       - name: Sync yf
         run: uv sync --project scripts/python/yf --frozen --no-dev
 
-      - name: Fetch OHLCV history
+      - name: Download macrotrends
+        run: |
+          tag=$(gh api "repos/${{ github.repository }}/releases" --jq \
+            '[.[] | select(.tag_name | startswith("macrotrends-"))] | .[0].tag_name' \
+            2>/dev/null || echo "")
+          [ -n "$tag" ] || { echo "::error::no macrotrends release found"; exit 1; }
+          gh release download "$tag" --repo "${{ github.repository }}" \
+            --pattern "macrotrends" --dir /usr/local/bin
+          chmod +x /usr/local/bin/macrotrends
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch history
         env:
           TICKER_INPUT: ${{ github.event.inputs.ticker }}
         run: |
@@ -51,10 +63,11 @@ jobs:
           for TICKER in "${TICKERS[@]}"; do
             T=$(echo "${TICKER// /}" | tr '[:lower:]' '[:upper:]')
             [ -n "$T" ] || continue
-            [ "$first" = true ] || sleep 3
+            [ "$first" = true ] || sleep 10
             first=false
             echo "--- $T ---"
             uv run --project scripts/python/yf --frozen --no-dev -- yf ohlcv "$T"
+            macrotrends peratio --write "$T"
             git add data/stocks
-            commit_if_staged "chore: ${T,,} ohlcv history"
+            commit_if_staged "chore: ${T,,} history"
           done
