@@ -1,1 +1,2 @@
 data/stocks/*/ohlcv.csv filter=lfs diff=lfs merge=lfs -text
+data/stocks/*/peratio.csv filter=lfs diff=lfs merge=lfs -text
