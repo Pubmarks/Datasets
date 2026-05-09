@@ -11,12 +11,12 @@ import sys
 from pathlib import Path
 
 
-def _year_range(ticker_dir: Path) -> str | None:
+def _year_range(ticker_dir: Path, filename: str) -> str | None:
     years = sorted(
         d.name
         for d in ticker_dir.iterdir()
         if d.is_dir() and len(d.name) == 4 and d.name.isdigit()
-        and (d / "ohlcv.csv").exists()
+        and (d / filename).exists()
     )
     if not years:
         return None
@@ -37,9 +37,13 @@ def build_rows(data_root: Path) -> list[str]:
         if not flat.exists():
             continue
         ticker = ticker_dir.name.upper()
-        cdn_url = f"{CDN_BASE}/{ticker_dir.name}/ohlcv.csv"
-        label = _year_range(ticker_dir) or "—"
-        rows.append(f"| {ticker} | {label} | [csv]({cdn_url}) |")
+        ohlcv_url = f"{CDN_BASE}/{ticker_dir.name}/ohlcv.csv"
+        eps_url = f"{CDN_BASE}/{ticker_dir.name}/eps.csv"
+        ohlcv_label = _year_range(ticker_dir, "ohlcv.csv") or "—"
+        eps_label = _year_range(ticker_dir, "eps.csv")
+        ohlcv_cell = f"[{ohlcv_label}]({ohlcv_url})"
+        eps_cell = f"[{eps_label}]({eps_url})" if eps_label else "—"
+        rows.append(f"| {ticker} | {ohlcv_cell} | {eps_cell} |")
     return rows
 
 
@@ -71,7 +75,7 @@ def update_readme(readme: Path, rows: list[str]) -> None:
     while k < len(lines) and lines[k].lstrip().startswith("|"):
         k += 1
 
-    header = ["| Ticker | OHLCV Period | CDN |\n", "| ------ | ------------ | --- |\n"]
+    header = ["| Ticker | OHLCV | EPS |\n", "| ------ | ----- | --- |\n"]
     body = [r + "\n" for r in rows]
 
     if not table_found and j > 0 and lines[j - 1].strip() != "":
