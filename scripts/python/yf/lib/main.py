@@ -86,7 +86,12 @@ def ohlcv_cmd(parts: tuple[str, ...]) -> None:
     last_d = read_last_date(path)
     from_d = last_d + dt.timedelta(days=1) if last_d else None
 
-    cutoff = dt.date(year, 12, 31) if year_set else dt.date.today()
+    today = dt.date.today()
+    cutoff = dt.date(year, 12, 31) if year_set else today
+    if today.weekday() == 5:
+        cutoff = min(cutoff, today - dt.timedelta(days=1))
+    elif today.weekday() == 6:
+        cutoff = min(cutoff, today - dt.timedelta(days=2))
     if from_d and from_d > cutoff:
         err(f"{path}: already up to date")
         return
