@@ -3,21 +3,39 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import List, Tuple
 
 import pandas as pd
 import yfinance as yf
+
+Row = tuple[str, float, float, float, float, float]
 
 
 def _flatten_columns(frame: pd.DataFrame) -> pd.DataFrame:
     if not isinstance(frame.columns, pd.MultiIndex):
         return frame
-    # Single-ticker download: columns like ('Open', 'AAPL')
+    # Single-ticker download produces columns like ('Open', 'AAPL') — drop the ticker level.
     if frame.columns.nlevels >= 2:
         tickers = frame.columns.get_level_values(1).unique()
         if len(tickers) == 1:
             return frame.droplevel(1, axis=1)
     return frame
+
+
+def _download_kwargs(
+    year: int | None,
+    year_set: bool,
+    from_date: dt.date | None,
+) -> dict:
+    base: dict = {"interval": "1d", "auto_adjust": False, "actions": False, "progress": False, "threads": False}
+    if year_set and year is not None:
+        base["start"] = from_date.isoformat() if from_date else f"{year}-01-01"
+        base["end"] = f"{year + 1}-01-01"
+    elif from_date is not None:
+        base["start"] = from_date.isoformat()
+        base["end"] = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+    else:
+        base["period"] = "max"
+    return base
 
 
 def fetch_daily_ohlcv(
@@ -26,42 +44,9 @@ def fetch_daily_ohlcv(
     year: int | None,
     year_set: bool,
     from_date: dt.date | None = None,
-) -> List[Tuple[str, float, float, float, float, float]]:
+) -> list[Row]:
     symbol = ticker.upper().strip()
-    if year_set and year is not None:
-        start = from_date.isoformat() if from_date else f"{year}-01-01"
-        end = f"{year + 1}-01-01"
-        df = yf.download(
-            symbol,
-            start=start,
-            end=end,
-            interval="1d",
-            auto_adjust=False,
-            actions=False,
-            progress=False,
-            threads=False,
-        )
-    elif from_date is not None:
-        df = yf.download(
-            symbol,
-            start=from_date.isoformat(),
-            end=(dt.date.today() + dt.timedelta(days=1)).isoformat(),
-            interval="1d",
-            auto_adjust=False,
-            actions=False,
-            progress=False,
-            threads=False,
-        )
-    else:
-        df = yf.download(
-            symbol,
-            period="max",
-            interval="1d",
-            auto_adjust=False,
-            actions=False,
-            progress=False,
-            threads=False,
-        )
+    df = yf.download(symbol, **_download_kwargs(year, year_set, from_date))
 
     if df is None or df.empty:
         return []
@@ -71,16 +56,15 @@ def fetch_daily_ohlcv(
     if not required.issubset(df.columns):
         raise RuntimeError(f"unexpected columns from yfinance: {list(df.columns)}")
 
-    from_d = dt.datetime(year, 1, 1, tzinfo=dt.timezone.utc).date() if year_set and year else None
-    to_d = dt.datetime(year, 12, 31, tzinfo=dt.timezone.utc).date() if year_set and year else None
+    year_start = dt.date(year, 1, 1) if (year_set and year) else None
+    year_end = dt.date(year, 12, 31) if (year_set and year) else None
 
-    rows: List[Tuple[str, float, float, float, float, float]] = []
+    rows: list[Row] = []
     for idx, row in df.iterrows():
         ts = pd.Timestamp(idx)
         d = ts.tz_convert("UTC").date() if ts.tzinfo else ts.date()
-        if year_set and from_d is not None and to_d is not None:
-            if d < from_d or d > to_d:
-                continue
+        if year_start and year_end and (d < year_start or d > year_end):
+            continue
         o = float(row["Open"])
         h = float(row["High"])
         lo = float(row["Low"])
@@ -88,17 +72,7 @@ def fetch_daily_ohlcv(
         v = float(row["Volume"])
         if pd.isna(o) or pd.isna(h) or pd.isna(lo) or pd.isna(c) or pd.isna(v):
             continue
-        # Match typical pubmarks OHLCV files (e.g. datasets/stocks/*/ohlcv.csv): 3dp prices, whole volume.
-        rows.append(
-            (
-                d.isoformat(),
-                round(o, 3),
-                round(h, 3),
-                round(lo, 3),
-                round(c, 3),
-                float(int(v)),
-            )
-        )
+        rows.append((d.isoformat(), round(o, 3), round(h, 3), round(lo, 3), round(c, 3), float(int(v))))
 
     rows.sort(key=lambda r: r[0])
     return rows

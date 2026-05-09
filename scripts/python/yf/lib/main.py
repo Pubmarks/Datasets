@@ -1,4 +1,4 @@
-"""CLI entrypoint: macrotrends-compatible `yf ohlcv`."""
+"""CLI entrypoint for `yf ohlcv`."""
 
 from __future__ import annotations
 
@@ -73,8 +73,7 @@ def _need_subcommand() -> None:
         "specify a subcommand: ohlcv\n\n"
         "Examples:\n"
         "  yf ohlcv AAPL\n"
-        "  yf ohlcv MSFT 2024\n"
-        "  TICKER=AAPL yf ohlcv 2024\n\n"
+        "  yf ohlcv MSFT 2024\n\n"
         'Run "yf --help" for full usage.'
     )
     raise SystemExit(1)
@@ -98,16 +97,6 @@ def yf(ctx: click.Context) -> None:
 )
 @click.argument("parts", nargs=-1)
 def ohlcv_cmd(parts: tuple[str, ...]) -> None:
-    """
-    Ticker: TICKER environment variable and/or first argument.
-
-    Year: YEAR environment and/or last argument; a single 4-digit argument sets year
-    only (ticker from env).
-
-    Without a year: flat file (data/stocks/TICKER/ohlcv.csv) is updated first with one
-    Yahoo call, then all per-year files are created or updated locally from the flat
-    file — no additional network calls.
-    """
     try:
         ticker, year, year_set = parse_ticker_year(parts)
     except ValueError as e:

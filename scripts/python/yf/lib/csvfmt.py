@@ -1,22 +1,21 @@
-"""OHLCV CSV format matching scripts/go/macrotrends (csvdata.go)."""
+"""OHLCV CSV read/write utilities."""
 
 from __future__ import annotations
 
 import csv
 import datetime as dt
-import io
 import math
 import os
 import sys
 from pathlib import Path
-from typing import Iterable
+from typing import IO, Iterable
 
 
 OHLCV_HEADER = "date,open,high,low,close,volume"
 
 
 def fmt_float(f: float) -> str:
-    """Approximate Go strconv.FormatFloat(x, 'f', -1, 64) for OHLCV rows."""
+    """Format a float without trailing zeros; integers omit the decimal point."""
     if not math.isfinite(f):
         raise ValueError(f"non-finite float: {f}")
     i = int(round(f))
@@ -26,7 +25,7 @@ def fmt_float(f: float) -> str:
     return s if s else "0"
 
 
-def write_ohlcv_csv(rows: Iterable[tuple[str, float, float, float, float, float]], out: io.TextIOBase) -> None:
+def write_ohlcv_csv(rows: Iterable[tuple[str, float, float, float, float, float]], out: IO[str]) -> None:
     w = csv.writer(out, lineterminator="\n")
     w.writerow(OHLCV_HEADER.split(","))
     for date, o, h, lo, c, vol in rows:
