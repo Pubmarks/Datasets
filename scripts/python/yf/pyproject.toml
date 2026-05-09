@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yf"
+version = "0.1.0"
+description = "Yahoo Finance daily OHLCV CLI (yfinance)"
+requires-python = ">=3.11"
+dependencies = [
+    "yfinance>=0.2.40",
+    "pandas>=2.0",
+    "click>=8.1",
+]
+
+[project.scripts]
+yf = "lib.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lib"]
