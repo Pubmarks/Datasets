@@ -3,8 +3,7 @@ name: Datasets GitHub Pages
 on:
   workflow_run:
     workflows:
-      - Stocks history
-      - Stocks OHLCV update daily
+      - Update README table
     types: [completed]
   workflow_dispatch:
 
