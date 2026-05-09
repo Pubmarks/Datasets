@@ -1,0 +1,59 @@
+name: Stocks history
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticker:
+        description: "Comma-separated tickers (e.g. MSFT,AAPL)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync yf
+        run: uv sync --project scripts/python/yf --frozen --no-dev
+
+      - name: Fetch OHLCV history
+        env:
+          TICKER_INPUT: ${{ github.event.inputs.ticker }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          commit_if_staged() {
+            if ! git diff --staged --quiet; then
+              git commit -m "$1"
+              git pull --rebase origin main
+              git push
+            fi
+          }
+
+          TRIMMED="${TICKER_INPUT// /}"
+          [ -n "$TRIMMED" ] || { echo "::error::ticker input is required"; exit 1; }
+          IFS=',' read -ra TICKERS <<< "$TRIMMED"
+
+          first=true
+          for TICKER in "${TICKERS[@]}"; do
+            T=$(echo "${TICKER// /}" | tr '[:lower:]' '[:upper:]')
+            [ -n "$T" ] || continue
+            [ "$first" = true ] || sleep 3
+            first=false
+            echo "--- $T ---"
+            uv run --project scripts/python/yf --frozen --no-dev -- yf ohlcv "$T"
+            git add data/stocks
+            commit_if_staged "chore: ${T,,} ohlcv history"
+          done
