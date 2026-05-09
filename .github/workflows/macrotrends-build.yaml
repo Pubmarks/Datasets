@@ -22,7 +22,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ^1.25.7
+          go-version: "1.25"
 
       - name: Get previous tag
         id: previoustag
@@ -35,7 +35,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get next minor version
+      - name: Get next patch version
         id: semvers
         uses: WyriHaximus/github-action-next-semvers@v1
         with:
