@@ -16,7 +16,7 @@ func newRootCmd() *cobra.Command {
 
 Subcommands:
   ohlcv   daily OHLCV CSV to stdout
-  peratio historical P/E table as CSV to stdout`,
+  eps     historical EPS/P/E table as CSV to stdout`,
 		Args:          cobra.NoArgs,
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -26,19 +26,19 @@ Subcommands:
 	}
 
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newOhlcvCmd(), newPeratioCmd())
+	root.AddCommand(newOhlcvCmd(), newEpsCmd())
 	return root
 }
 
 func errNeedSubcommand(cmd *cobra.Command) error {
 	path := cmd.CommandPath()
 	var b strings.Builder
-	fmt.Fprintf(&b, "specify a subcommand: ohlcv, peratio\n\n")
+	fmt.Fprintf(&b, "specify a subcommand: ohlcv, eps\n\n")
 	fmt.Fprintf(&b, "Examples:\n")
 	fmt.Fprintf(&b, "  %s ohlcv AAPL\n", path)
 	fmt.Fprintf(&b, "  %s ohlcv MSFT 2024\n", path)
 	fmt.Fprintf(&b, "  TICKER=AAPL %s ohlcv 2024\n", path)
-	fmt.Fprintf(&b, "  %s peratio AAPL\n\n", path)
+	fmt.Fprintf(&b, "  %s eps AAPL\n\n", path)
 	fmt.Fprintf(&b, "Run \"%s --help\" for full usage.\n", path)
 	return errors.New(strings.TrimRight(b.String(), "\n"))
 }

@@ -41,8 +41,8 @@ func resolveChartBaseURL(ctx context.Context, client *http.Client, stockSymbol s
 	return final, nil
 }
 
-// resolvePERatioPageURL is resolveChartBaseURL + "/pe-ratio".
-func resolvePERatioPageURL(ctx context.Context, client *http.Client, stockSymbol string) (string, error) {
+// resolveEPSPageURL is resolveChartBaseURL + "/pe-ratio".
+func resolveEPSPageURL(ctx context.Context, client *http.Client, stockSymbol string) (string, error) {
 	base, err := resolveChartBaseURL(ctx, client, stockSymbol)
 	if err != nil {
 		return "", err

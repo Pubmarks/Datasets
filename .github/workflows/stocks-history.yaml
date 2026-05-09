@@ -68,7 +68,7 @@ jobs:
             first=false
             echo "--- $T ---"
             uv run --project scripts/python/yf --frozen --no-dev -- yf ohlcv "$T"
-            macrotrends peratio --write "$T"
+            macrotrends eps --write "$T"
             git add data/stocks
             commit_if_staged "chore: ${T,,} history"
           done
