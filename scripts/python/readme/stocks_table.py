@@ -23,6 +23,9 @@ def _year_range(ticker_dir: Path) -> str | None:
     return f"{years[0]}–{years[-1]}" if len(years) > 1 else years[0]
 
 
+CDN_BASE = "https://pubmarks.github.io/datasets/stocks"
+
+
 def build_rows(data_root: Path) -> list[str]:
     rows: list[str] = []
     if not data_root.is_dir():
@@ -34,9 +37,9 @@ def build_rows(data_root: Path) -> list[str]:
         if not flat.exists():
             continue
         ticker = ticker_dir.name.upper()
-        link_path = f"data/stocks/{ticker_dir.name}/ohlcv.csv"
-        label = _year_range(ticker_dir) or "data"
-        rows.append(f"| {ticker} | [{label}]({link_path}) |")
+        cdn_url = f"{CDN_BASE}/{ticker_dir.name}/ohlcv.csv"
+        label = _year_range(ticker_dir) or "—"
+        rows.append(f"| {ticker} | {label} | [csv]({cdn_url}) |")
     return rows
 
 
@@ -68,7 +71,7 @@ def update_readme(readme: Path, rows: list[str]) -> None:
     while k < len(lines) and lines[k].lstrip().startswith("|"):
         k += 1
 
-    header = ["| Ticker | OHLCV |\n", "| ------ | ----- |\n"]
+    header = ["| Ticker | OHLCV Period | CDN |\n", "| ------ | ------------ | --- |\n"]
     body = [r + "\n" for r in rows]
 
     if not table_found and j > 0 and lines[j - 1].strip() != "":
