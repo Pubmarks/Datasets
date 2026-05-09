@@ -23,7 +23,7 @@ def _year_range(ticker_dir: Path) -> str | None:
     return f"{years[0]}–{years[-1]}" if len(years) > 1 else years[0]
 
 
-CDN_BASE = "https://pubmarks.github.io/Datasets/stocks"
+CDN_BASE = "https://pubmarks.github.io/datasets/stocks"
 
 
 def build_rows(data_root: Path) -> list[str]:
