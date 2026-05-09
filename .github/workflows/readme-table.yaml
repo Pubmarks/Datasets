@@ -5,6 +5,7 @@ on:
     workflows:
       - Stocks history
       - Stocks OHLCV update daily
+      - Stocks EPS update weekly
     types:
       - completed
   workflow_dispatch:
