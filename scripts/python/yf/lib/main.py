@@ -43,7 +43,7 @@ def _weekend_cutoff(today: dt.date, base: dt.date) -> dt.date:
     return base
 
 
-def _sync_year_files(root: Path, ticker: str, all_rows: list) -> None:
+def _sync_year_files(root: Path, ticker: str, all_rows: list, force_year: int | None = None) -> None:
     """Create or incrementally update per-year files from flat file data."""
     by_year: dict[int, list] = {}
     for row in all_rows:
@@ -52,6 +52,12 @@ def _sync_year_files(root: Path, ticker: str, all_rows: list) -> None:
 
     for year, year_rows in sorted(by_year.items()):
         year_path = root / "data" / "stocks" / ticker / str(year) / "ohlcv.csv"
+
+        if year == force_year:
+            write_ohlcv_csv_atomic(year_rows, year_path)
+            err(f"wrote {len(year_rows)} row(s) to {year_path}")
+            continue
+
         year_last_d = read_last_date(year_path)
         flat_year_last_d = dt.date.fromisoformat(year_rows[-1][0])
 
@@ -135,30 +141,23 @@ def ohlcv_cmd(parts: tuple[str, ...]) -> None:
         err(f"wrote {len(rows)} row(s) to {path}")
 
     else:
-        # --- no year: update flat file, then sync all year files ---
+        # --- no year: overwrite current year in flat file, then sync all year files ---
         flat_path = root / "data" / "stocks" / ticker / "ohlcv.csv"
-        flat_last_d = read_last_date(flat_path)
-        from_d = flat_last_d + dt.timedelta(days=1) if flat_last_d else None
-        cutoff = _weekend_cutoff(today, today)
 
-        if from_d and from_d > cutoff:
-            err(f"{flat_path}: already up to date")
-        else:
-            try:
-                new_rows = fetch_daily_ohlcv(ticker, year=None, year_set=False, from_date=from_d)
-            except Exception as e:
-                err(str(e))
-                raise SystemExit(1) from e
+        try:
+            new_year_rows = fetch_daily_ohlcv(ticker, year=today.year, year_set=True, from_date=None)
+        except Exception as e:
+            err(str(e))
+            raise SystemExit(1) from e
 
-            flat_path.parent.mkdir(parents=True, exist_ok=True)
-            if flat_last_d is None:
-                write_ohlcv_csv_atomic(new_rows, flat_path)
-            else:
-                append_ohlcv_rows(new_rows, flat_path)
-            err(f"wrote {len(new_rows)} row(s) to {flat_path}")
+        existing = read_ohlcv_rows(flat_path)
+        prior_rows = [r for r in existing if int(r[0][:4]) < today.year]
+        merged = prior_rows + new_year_rows
+        flat_path.parent.mkdir(parents=True, exist_ok=True)
+        write_ohlcv_csv_atomic(merged, flat_path)
+        err(f"wrote {len(new_year_rows)} current-year row(s) to {flat_path}")
 
-        all_rows = read_ohlcv_rows(flat_path)
-        _sync_year_files(root, ticker, all_rows)
+        _sync_year_files(root, ticker, merged, force_year=today.year)
 
 
 def main() -> None:
