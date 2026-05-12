@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let combined = combine::combine_ohlcv_eps(&ohlcv, &eps_output)?;
     let combined = combine::forward_fill_ohlcv(&combined)?;
     let combined = combine::interpolate_eps(&combined)?;
+    let combined = combine::add_pe_ratio(&combined)?;
     let combined_path = dir.join("combined_temp.csv");
     fs::write(&combined_path, &combined)?;
     println!("wrote {}", combined_path.display());

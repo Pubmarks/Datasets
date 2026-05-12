@@ -83,6 +83,39 @@ pub fn interpolate_eps(combined: &str) -> Result<String, Box<dyn Error>> {
     Ok(String::from_utf8(out)?)
 }
 
+pub fn add_pe_ratio(combined: &str) -> Result<String, Box<dyn Error>> {
+    let mut reader = csv::Reader::from_reader(Cursor::new(combined));
+    let headers = reader.headers()?.clone();
+
+    let i_close = headers.iter().position(|c| c == "close").ok_or("missing close")?;
+    let i_eps   = headers.iter().position(|c| c == "ttm_net_eps").ok_or("missing ttm_net_eps")?;
+
+    let mut out = Vec::new();
+    let mut writer = csv::Writer::from_writer(&mut out);
+
+    let mut new_headers: Vec<String> = headers.iter().map(str::to_string).collect();
+    new_headers.push("pe_ratio".to_string());
+    writer.write_record(&new_headers)?;
+
+    for result in reader.records() {
+        let record = result?;
+        let pe = match (
+            record.get(i_close).and_then(|v| v.parse::<f64>().ok()),
+            record.get(i_eps).and_then(|v| v.parse::<f64>().ok()),
+        ) {
+            (Some(close), Some(eps)) if eps != 0.0 => format!("{:.2}", close / eps),
+            _ => String::new(),
+        };
+        let mut row: Vec<String> = record.iter().map(str::to_string).collect();
+        row.push(pe);
+        writer.write_record(&row)?;
+    }
+
+    writer.flush()?;
+    drop(writer);
+    Ok(String::from_utf8(out)?)
+}
+
 pub fn combine_ohlcv_eps(ohlcv: &str, eps: &str) -> Result<String, Box<dyn Error>> {
     let (ohlcv_headers, ohlcv_by_date) = parse_ohlcv(ohlcv)?;
     let eps_by_date = parse_eps_lookup(eps)?;
@@ -231,6 +264,19 @@ date,open,high,low,close,volume,ttm_net_eps
         for line in out.trim().lines().skip(1) {
             assert!(line.ends_with(",3.00"), "expected 3.00, got: {line}");
         }
+    }
+
+    #[test]
+    fn pe_ratio_is_calculated() {
+        let combined = "\
+date,open,high,low,close,volume,ttm_net_eps
+2024-01-01,100,110,90,200.00,1000,4.00
+2024-01-02,100,110,90,150.00,1000,";
+
+        let out = add_pe_ratio(combined).unwrap();
+        let rows: Vec<&str> = out.trim().lines().collect();
+        assert!(rows[1].ends_with(",50.00"), "expected 50.00: {}", rows[1]);
+        assert!(rows[2].ends_with(","), "expected empty pe: {}", rows[2]);
     }
 
     #[test]
