@@ -81,6 +81,10 @@ jobs:
               echo "--- ${ticker} (last: ${last_label}) --- skipped (updated within 7 days)"
               continue
             fi
+            if git log --since="6 hours ago" --name-only --format="" -- "${ROOT}/${ticker}/" | grep -q "eps.csv"; then
+              echo "--- ${ticker} (last: ${last_label}) --- skipped (committed within last 6 hours)"
+              continue
+            fi
             if [ "$prev_ran" = true ]; then sleep 10; fi
             prev_ran=true
             echo "--- ${ticker} (last: ${last_label}) ---"
