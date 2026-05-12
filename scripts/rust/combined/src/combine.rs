@@ -29,6 +29,60 @@ fn parse_eps_lookup(eps: &str) -> Result<HashMap<String, String>, Box<dyn Error>
     Ok(by_date)
 }
 
+pub fn interpolate_eps(combined: &str) -> Result<String, Box<dyn Error>> {
+    let mut reader = csv::Reader::from_reader(Cursor::new(combined));
+    let headers = reader.headers()?.clone();
+    let ie = headers.iter().position(|c| c == "ttm_net_eps").ok_or("missing ttm_net_eps")?;
+
+    let mut rows: Vec<Vec<String>> = reader.records()
+        .map(|r| r.map(|rec| rec.iter().map(str::to_string).collect()))
+        .collect::<Result<_, _>>()?;
+
+    let mut i = 0;
+    while i < rows.len() {
+        if rows[i][ie].is_empty() {
+            // find the last known value before this gap
+            let prev = (0..i).rev().find(|&j| !rows[j][ie].is_empty());
+            // find the next known value after this gap
+            let next = (i + 1..rows.len()).find(|&j| !rows[j][ie].is_empty());
+
+            match (prev, next) {
+                (Some(p), Some(j)) => {
+                    // interpolate between prev and next
+                    let v0: f64 = rows[p][ie].parse()?;
+                    let v1: f64 = rows[j][ie].parse()?;
+                    let steps = (j - p) as f64;
+                    for k in (p + 1)..j {
+                        let t = (k - p) as f64 / steps;
+                        rows[k][ie] = format!("{:.2}", v0 + t * (v1 - v0));
+                    }
+                    i = j;
+                }
+                (Some(p), None) => {
+                    // trailing gap — forward-fill from last known
+                    let last = rows[p][ie].clone();
+                    for k in i..rows.len() {
+                        rows[k][ie] = last.clone();
+                    }
+                    break;
+                }
+                // leading gap with no prior value — leave empty
+                _ => { i += 1; }
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut writer = csv::Writer::from_writer(&mut out);
+    writer.write_record(&headers)?;
+    for row in &rows { writer.write_record(row)?; }
+    writer.flush()?;
+    drop(writer);
+    Ok(String::from_utf8(out)?)
+}
+
 pub fn combine_ohlcv_eps(ohlcv: &str, eps: &str) -> Result<String, Box<dyn Error>> {
     let (ohlcv_headers, ohlcv_by_date) = parse_ohlcv(ohlcv)?;
     let eps_by_date = parse_eps_lookup(eps)?;
@@ -137,6 +191,46 @@ date,stock_price,ttm_net_eps,pe_ratio
         let mut sorted = dates.clone();
         sorted.sort();
         assert_eq!(dates, sorted);
+    }
+
+    #[test]
+    fn interpolate_fills_gap_linearly() {
+        let combined = "\
+date,open,high,low,close,volume,ttm_net_eps
+2024-01-01,100,110,90,105,1000,3.00
+2024-01-02,100,110,90,105,1000,
+2024-01-03,100,110,90,105,1000,4.00";
+
+        let out = interpolate_eps(combined).unwrap();
+        let mid = out.trim().lines().find(|l| l.starts_with("2024-01-02")).unwrap();
+        assert!(mid.ends_with(",3.50"), "expected 3.50, got: {mid}");
+    }
+
+    #[test]
+    fn interpolate_handles_decreasing_eps() {
+        let combined = "\
+date,open,high,low,close,volume,ttm_net_eps
+2024-01-01,100,110,90,105,1000,4.00
+2024-01-02,100,110,90,105,1000,
+2024-01-03,100,110,90,105,1000,2.00";
+
+        let out = interpolate_eps(combined).unwrap();
+        let mid = out.trim().lines().find(|l| l.starts_with("2024-01-02")).unwrap();
+        assert!(mid.ends_with(",3.00"), "expected 3.00, got: {mid}");
+    }
+
+    #[test]
+    fn interpolate_forward_fills_trailing_gap() {
+        let combined = "\
+date,open,high,low,close,volume,ttm_net_eps
+2024-01-01,100,110,90,105,1000,3.00
+2024-01-02,100,110,90,105,1000,
+2024-01-03,100,110,90,105,1000,";
+
+        let out = interpolate_eps(combined).unwrap();
+        for line in out.trim().lines().skip(1) {
+            assert!(line.ends_with(",3.00"), "expected 3.00, got: {line}");
+        }
     }
 
     #[test]
