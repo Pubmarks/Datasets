@@ -1,34 +1,39 @@
 use std::error::Error;
+use std::io::Cursor;
 
 pub fn fill_missing_eps(input: &str) -> Result<String, Box<dyn Error>> {
-    let mut lines = input.lines();
+    let mut reader = csv::Reader::from_reader(Cursor::new(input));
+    let headers = reader.headers()?.clone();
 
-    let header = lines.next().ok_or("Empty file")?;
-    let cols: Vec<&str> = header.split(',').collect();
+    let ip  = headers.iter().position(|c| c == "stock_price").ok_or("missing stock_price")?;
+    let ie  = headers.iter().position(|c| c == "ttm_net_eps").ok_or("missing ttm_net_eps")?;
+    let ipe = headers.iter().position(|c| c == "pe_ratio").ok_or("missing pe_ratio")?;
 
-    let ip  = cols.iter().position(|&c| c == "stock_price").ok_or("missing stock_price")?;
-    let ie  = cols.iter().position(|&c| c == "ttm_net_eps").ok_or("missing ttm_net_eps")?;
-    let ipe = cols.iter().position(|&c| c == "pe_ratio").ok_or("missing pe_ratio")?;
+    let mut out = Vec::new();
+    let mut writer = csv::Writer::from_writer(&mut out);
+    writer.write_record(&headers)?;
 
-    let mut out = format!("{header}\n");
+    for result in reader.records() {
+        let mut record = result?;
 
-    for line in lines {
-        if line.trim().is_empty() { continue; }
-        let mut fields: Vec<String> = line.split(',').map(str::to_string).collect();
-
-        if fields.get(ie).map(|v| v.trim().is_empty()).unwrap_or(true) {
-            let price: f64 = fields.get(ip).and_then(|v| v.trim().parse().ok())
-                .ok_or(format!("missing stock_price on row: {line}"))?;
-            let pe: f64 = fields.get(ipe).and_then(|v| v.trim().parse().ok())
-                .ok_or(format!("missing pe_ratio on row: {line}"))?;
-            fields[ie] = format!("{:.2}", price / pe);
+        if record.get(ie).map(|v| v.trim().is_empty()).unwrap_or(true) {
+            let price: f64 = record.get(ip).and_then(|v| v.trim().parse().ok())
+                .ok_or(format!("missing stock_price on row: {}", record.as_slice()))?;
+            let pe: f64 = record.get(ipe).and_then(|v| v.trim().parse().ok())
+                .ok_or(format!("missing pe_ratio on row: {}", record.as_slice()))?;
+            record = csv::StringRecord::from(
+                record.iter().enumerate()
+                    .map(|(i, v)| if i == ie { format!("{:.2}", price / pe) } else { v.to_string() })
+                    .collect::<Vec<_>>()
+            );
         }
 
-        out.push_str(&fields.join(","));
-        out.push('\n');
+        writer.write_record(&record)?;
     }
 
-    Ok(out)
+    writer.flush()?;
+    drop(writer);
+    Ok(String::from_utf8(out)?)
 }
 
 #[cfg(test)]

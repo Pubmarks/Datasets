@@ -1,3 +1,4 @@
+mod combine;
 mod eps;
 
 use std::env;
@@ -23,12 +24,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let dir = find_ticker_dir(&ticker)
         .ok_or(format!("could not find data/stocks/{ticker}"))?;
 
-    let eps_path = dir.join("eps.csv");
-    let input = fs::read_to_string(&eps_path)?;
-    let output = eps::fill_missing_eps(&input)?;
+    // fill missing eps
+    let eps_input = fs::read_to_string(dir.join("eps.csv"))?;
+    let eps_output = eps::fill_missing_eps(&eps_input)?;
+    let eps_temp_path = dir.join("eps_temp.csv");
+    fs::write(&eps_temp_path, &eps_output)?;
+    println!("wrote {}", eps_temp_path.display());
 
-    let out_path = dir.join("eps_temp.csv");
-    fs::write(&out_path, &output)?;
-    println!("wrote {}", out_path.display());
+    // merge ohlcv + eps
+    let ohlcv = fs::read_to_string(dir.join("ohlcv.csv"))?;
+    let combined = combine::combine_ohlcv_eps(&ohlcv, &eps_output)?;
+    let combined_path = dir.join("combined_temp.csv");
+    fs::write(&combined_path, &combined)?;
+    println!("wrote {}", combined_path.display());
+
     Ok(())
 }

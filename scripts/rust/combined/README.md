@@ -1,11 +1,12 @@
 # combined
 
-Fills in missing `ttm_net_eps` values in an EPS CSV file.
+Accepts a ticker symbol, finds `data/stocks/<TICKER>/` by walking up from the current directory, and produces two output files:
 
-For any row where `ttm_net_eps` is blank, it back-calculates EPS from the other two columns using `EPS = price / P/E ratio`. Rows that already have EPS are left untouched. The result is printed to stdout.
+- **`eps_temp.csv`** — copy of `eps.csv` with any missing `ttm_net_eps` values back-calculated as `price / pe_ratio`
+- **`combined_temp.csv`** — `ohlcv.csv` with a `ttm_net_eps` column appended, full outer join on date (empty cells where no match)
 
 ## Usage
 
 ```
-cargo run -- <eps_file.csv>
+cargo run -- <TICKER>
 ```
