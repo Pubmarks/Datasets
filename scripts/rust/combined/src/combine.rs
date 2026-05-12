@@ -59,6 +59,39 @@ pub fn combine_ohlcv_eps(ohlcv: &str, eps: &str) -> Result<String, Box<dyn Error
     Ok(String::from_utf8(out)?)
 }
 
+pub fn forward_fill_ohlcv(combined: &str) -> Result<String, Box<dyn Error>> {
+    let mut reader = csv::Reader::from_reader(Cursor::new(combined));
+    let headers = reader.headers()?.clone();
+
+    // ohlcv fields are everything except date (col 0) and ttm_net_eps (last col)
+    let ohlcv_range = 1..headers.len() - 1;
+
+    let mut out = Vec::new();
+    let mut writer = csv::Writer::from_writer(&mut out);
+    writer.write_record(&headers)?;
+
+    let mut last_ohlcv: Vec<String> = vec![String::new(); ohlcv_range.len()];
+
+    for result in reader.records() {
+        let mut row: Vec<String> = result?.iter().map(str::to_string).collect();
+        let ohlcv_missing = row[1..row.len() - 1].iter().all(|v| v.is_empty());
+
+        if ohlcv_missing {
+            for (i, val) in last_ohlcv.iter().enumerate() {
+                row[1 + i] = val.clone();
+            }
+        } else {
+            last_ohlcv = row[1..row.len() - 1].to_vec();
+        }
+
+        writer.write_record(&row)?;
+    }
+
+    writer.flush()?;
+    drop(writer);
+    Ok(String::from_utf8(out)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +143,42 @@ date,stock_price,ttm_net_eps,pe_ratio
     fn errors_on_missing_ttm_net_eps_column() {
         let bad_eps = "date,stock_price,pe_ratio\n2024-03-31,100,40";
         assert!(combine_ohlcv_eps(OHLCV, bad_eps).is_err());
+    }
+
+    #[test]
+    fn forward_fill_copies_last_ohlcv_into_empty_rows() {
+        let combined = "\
+date,open,high,low,close,volume,ttm_net_eps
+2024-06-30,105,115,95,110,2000,2.75
+2024-12-31,,,,,,3.00";
+
+        let out = forward_fill_ohlcv(combined).unwrap();
+        let dec_row = out.trim().lines().find(|l| l.starts_with("2024-12-31")).unwrap();
+        assert_eq!(dec_row, "2024-12-31,105,115,95,110,2000,3.00");
+    }
+
+    #[test]
+    fn forward_fill_preserves_rows_with_ohlcv() {
+        let combined = "\
+date,open,high,low,close,volume,ttm_net_eps
+2024-03-31,100,110,90,105,1000,2.50
+2024-06-30,105,115,95,110,2000,2.75";
+
+        let out = forward_fill_ohlcv(combined).unwrap();
+        let rows: Vec<&str> = out.trim().lines().collect();
+        assert_eq!(rows[1], "2024-03-31,100,110,90,105,1000,2.50");
+        assert_eq!(rows[2], "2024-06-30,105,115,95,110,2000,2.75");
+    }
+
+    #[test]
+    fn forward_fill_does_not_fill_before_first_ohlcv_row() {
+        let combined = "\
+date,open,high,low,close,volume,ttm_net_eps
+2024-01-01,,,,,,1.00
+2024-03-31,100,110,90,105,1000,2.50";
+
+        let out = forward_fill_ohlcv(combined).unwrap();
+        let jan_row = out.trim().lines().find(|l| l.starts_with("2024-01-01")).unwrap();
+        assert_eq!(jan_row, "2024-01-01,,,,,,1.00");
     }
 }

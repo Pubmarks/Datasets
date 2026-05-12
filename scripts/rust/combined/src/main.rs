@@ -31,9 +31,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     fs::write(&eps_temp_path, &eps_output)?;
     println!("wrote {}", eps_temp_path.display());
 
-    // merge ohlcv + eps
+    // merge ohlcv + eps, then forward-fill missing ohlcv rows
     let ohlcv = fs::read_to_string(dir.join("ohlcv.csv"))?;
     let combined = combine::combine_ohlcv_eps(&ohlcv, &eps_output)?;
+    let combined = combine::forward_fill_ohlcv(&combined)?;
     let combined_path = dir.join("combined_temp.csv");
     fs::write(&combined_path, &combined)?;
     println!("wrote {}", combined_path.display());
