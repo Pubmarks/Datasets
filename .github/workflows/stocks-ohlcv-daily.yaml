@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
+  push:
+    branches-ignore:
+      - main
 
 permissions:
   contents: write
@@ -53,7 +56,9 @@ jobs:
           first=true
           for dir in "${dirs[@]}"; do
             ticker=$(basename "$dir" | tr '[:lower:]' '[:upper:]')
-            if git log --since="6 hours ago" --name-only --format="" -- "${dir}/" | grep -q "ohlcv.csv"; then
+            recent=$(git log --since="6 hours ago" --name-only --format="" -- "${dir}/")
+            echo "DEBUG $ticker recent_files: $(echo "$recent" | tr '\n' '|')"
+            if echo "$recent" | grep -q "ohlcv.csv"; then
               echo "Skipping $ticker — committed within last 6 hours"
               continue
             fi
