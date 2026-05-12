@@ -1,0 +1,77 @@
+name: Stocks combined update
+
+on:
+  workflow_run:
+    workflows:
+      - Stocks history
+      - Stocks OHLCV update daily
+      - Stocks EPS update weekly
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          lfs: true
+
+      - name: Sync to latest on branch
+        if: github.event_name == 'workflow_run'
+        run: git fetch origin "${{ github.event.workflow_run.head_branch }}" && git reset --hard "origin/${{ github.event.workflow_run.head_branch }}"
+
+      - name: Download latest combined release
+        run: |
+          gh release download \
+            $(gh release list --repo ${{ github.repository }} \
+              --json tagName \
+              --jq '[.[] | select(.tagName | startswith("combined-"))] | .[0].tagName') \
+            --repo ${{ github.repository }} \
+            --pattern 'combined' \
+            --output /usr/local/bin/combined
+          chmod +x /usr/local/bin/combined
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebuild combined for all tickers
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          ROOT="data/stocks"
+          if [ ! -d "$ROOT" ]; then
+            echo "No ${ROOT}; nothing to update."
+            exit 0
+          fi
+          mapfile -t dirs < <(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | sort)
+          if [ ${#dirs[@]} -eq 0 ]; then
+            echo "No ticker directories under ${ROOT}; nothing to update."
+            exit 0
+          fi
+
+          for dir in "${dirs[@]}"; do
+            ticker=$(basename "$dir" | tr '[:lower:]' '[:upper:]')
+            echo "--- ${ticker} ---"
+            if ! combined "$ticker" 2>&1; then
+              echo "::warning::${ticker}: combined failed, skipping"
+            fi
+          done
+
+          git add "${ROOT}"
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: combined update"
+            git pull --rebase origin main
+            git push
+          fi

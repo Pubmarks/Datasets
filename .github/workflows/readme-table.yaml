@@ -3,9 +3,7 @@ name: Update README table
 on:
   workflow_run:
     workflows:
-      - Stocks history
-      - Stocks OHLCV update daily
-      - Stocks EPS update weekly
+      - Stocks combined update
     types:
       - completed
   workflow_dispatch:
