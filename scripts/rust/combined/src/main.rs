@@ -1,5 +1,6 @@
 mod combine;
 mod eps;
+mod validate;
 
 use std::env;
 use std::error::Error;
@@ -24,15 +25,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let dir = find_ticker_dir(&ticker)
         .ok_or(format!("could not find data/stocks/{ticker}"))?;
 
-    // fill missing eps
     let eps_input = fs::read_to_string(dir.join("eps.csv"))?;
+    let ohlcv_input = fs::read_to_string(dir.join("ohlcv.csv"))?;
+
+    validate::validate(&eps_input, &ohlcv_input)?;
+
+    // fill missing eps
     let eps_output = eps::fill_missing_eps(&eps_input)?;
     let eps_temp_path = dir.join("eps_temp.csv");
     fs::write(&eps_temp_path, &eps_output)?;
     println!("wrote {}", eps_temp_path.display());
 
     // merge ohlcv + eps, then forward-fill missing ohlcv rows
-    let ohlcv = fs::read_to_string(dir.join("ohlcv.csv"))?;
+    let ohlcv = ohlcv_input;
     let combined = combine::combine_ohlcv_eps(&ohlcv, &eps_output)?;
     let combined = combine::forward_fill_ohlcv(&combined)?;
     let combined = combine::interpolate_eps(&combined)?;
