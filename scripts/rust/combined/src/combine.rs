@@ -147,34 +147,37 @@ pub fn combine_ohlcv_eps(ohlcv: &str, eps: &str) -> Result<String, Box<dyn Error
     Ok(String::from_utf8(out)?)
 }
 
-pub fn forward_fill_ohlcv(combined: &str) -> Result<String, Box<dyn Error>> {
+pub fn shift_above_eps(combined: &str) -> Result<String, Box<dyn Error>> {
     let mut reader = csv::Reader::from_reader(Cursor::new(combined));
     let headers = reader.headers()?.clone();
+    let ie = headers.iter().position(|c| c == "ttm_net_eps").ok_or("missing ttm_net_eps")?;
 
-    // ohlcv fields are everything except date (col 0) and ttm_net_eps (last col)
-    let ohlcv_range = 1..headers.len() - 1;
+    let mut rows: Vec<Vec<String>> = reader.records()
+        .map(|r| r.map(|rec| rec.iter().map(str::to_string).collect()))
+        .collect::<Result<_, _>>()?;
+
+    let ohlcv_missing = |row: &Vec<String>| row[1..row.len() - 1].iter().all(|v| v.is_empty());
+
+    let mut i = 0;
+    while i < rows.len() {
+        if ohlcv_missing(&rows[i]) && !rows[i][ie].is_empty() {
+            // shift eps to the nearest previous row that has ohlcv data
+            if let Some(prev) = (0..i).rev().find(|&j| !ohlcv_missing(&rows[j])) {
+                if rows[prev][ie].is_empty() {
+                    let eps = rows[i][ie].clone();
+                    rows[prev][ie] = eps;
+                }
+            }
+            rows.remove(i);
+        } else {
+            i += 1;
+        }
+    }
 
     let mut out = Vec::new();
     let mut writer = csv::Writer::from_writer(&mut out);
     writer.write_record(&headers)?;
-
-    let mut last_ohlcv: Vec<String> = vec![String::new(); ohlcv_range.len()];
-
-    for result in reader.records() {
-        let mut row: Vec<String> = result?.iter().map(str::to_string).collect();
-        let ohlcv_missing = row[1..row.len() - 1].iter().all(|v| v.is_empty());
-
-        if ohlcv_missing {
-            for (i, val) in last_ohlcv.iter().enumerate() {
-                row[1 + i] = val.clone();
-            }
-        } else {
-            last_ohlcv = row[1..row.len() - 1].to_vec();
-        }
-
-        writer.write_record(&row)?;
-    }
-
+    for row in &rows { writer.write_record(row)?; }
     writer.flush()?;
     drop(writer);
     Ok(String::from_utf8(out)?)
@@ -289,39 +292,41 @@ date,open,high,low,close,volume,ttm_net_eps
     }
 
     #[test]
-    fn forward_fill_copies_last_ohlcv_into_empty_rows() {
+    fn shift_above_eps_moves_eps_to_prev_row_and_drops_eps_only_row() {
         let combined = "\
 date,open,high,low,close,volume,ttm_net_eps
-2024-06-30,105,115,95,110,2000,2.75
-2024-12-31,,,,,,3.00";
+2024-06-28,105,115,95,110,2000,
+2024-06-30,,,,,,3.00";
 
-        let out = forward_fill_ohlcv(combined).unwrap();
-        let dec_row = out.trim().lines().find(|l| l.starts_with("2024-12-31")).unwrap();
-        assert_eq!(dec_row, "2024-12-31,105,115,95,110,2000,3.00");
-    }
-
-    #[test]
-    fn forward_fill_preserves_rows_with_ohlcv() {
-        let combined = "\
-date,open,high,low,close,volume,ttm_net_eps
-2024-03-31,100,110,90,105,1000,2.50
-2024-06-30,105,115,95,110,2000,2.75";
-
-        let out = forward_fill_ohlcv(combined).unwrap();
+        let out = shift_above_eps(combined).unwrap();
         let rows: Vec<&str> = out.trim().lines().collect();
-        assert_eq!(rows[1], "2024-03-31,100,110,90,105,1000,2.50");
-        assert_eq!(rows[2], "2024-06-30,105,115,95,110,2000,2.75");
+        assert_eq!(rows.len(), 2, "eps-only row should be dropped");
+        assert_eq!(rows[1], "2024-06-28,105,115,95,110,2000,3.00");
     }
 
     #[test]
-    fn forward_fill_does_not_fill_before_first_ohlcv_row() {
+    fn shift_above_eps_does_not_overwrite_existing_eps() {
+        let combined = "\
+date,open,high,low,close,volume,ttm_net_eps
+2024-06-28,105,115,95,110,2000,2.75
+2024-06-30,,,,,,3.00";
+
+        let out = shift_above_eps(combined).unwrap();
+        let rows: Vec<&str> = out.trim().lines().collect();
+        assert_eq!(rows.len(), 2, "eps-only row should be dropped");
+        assert_eq!(rows[1], "2024-06-28,105,115,95,110,2000,2.75", "existing eps should not be overwritten");
+    }
+
+    #[test]
+    fn shift_above_eps_drops_eps_only_row_with_no_prior_ohlcv() {
         let combined = "\
 date,open,high,low,close,volume,ttm_net_eps
 2024-01-01,,,,,,1.00
-2024-03-31,100,110,90,105,1000,2.50";
+2024-03-31,100,110,90,105,1000,";
 
-        let out = forward_fill_ohlcv(combined).unwrap();
-        let jan_row = out.trim().lines().find(|l| l.starts_with("2024-01-01")).unwrap();
-        assert_eq!(jan_row, "2024-01-01,,,,,,1.00");
+        let out = shift_above_eps(combined).unwrap();
+        let rows: Vec<&str> = out.trim().lines().collect();
+        assert_eq!(rows.len(), 2, "eps-only row with no prior ohlcv should be dropped");
+        assert_eq!(rows[1], "2024-03-31,100,110,90,105,1000,");
     }
 }

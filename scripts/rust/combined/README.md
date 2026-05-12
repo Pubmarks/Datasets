@@ -1,27 +1,54 @@
 # combined
 
-Accepts a ticker symbol, finds `data/stocks/<TICKER>/` by walking up from the current directory, and produces `combined.csv`.
-
-## Validation
-
-Before any processing, the following checks run and exit on failure:
-
-1. No zero `ttm_net_eps` values (negative/positive allowed, zero is not)
-2. No stock splits detected — consecutive close prices must not match common split ratios (2:1, 3:1, 4:1, 5:1)
-
-## Output
-
-**`combined.csv`**
-1. Full outer join of `ohlcv.csv` and `eps.csv` on date
-2. Missing `ttm_net_eps` values back-calculated as `stock_price / pe_ratio`
-3. `ttm_net_eps` column appended from eps data
-4. EPS-only rows have ohlcv fields forward-filled from the last available trading day
-5. Rows without any prior eps data keep `ttm_net_eps` empty
-6. `ttm_net_eps` is linearly interpolated between known quarterly values
-7. `pe_ratio` column added as `close / ttm_net_eps` (empty if either is missing)
+Accepts a ticker symbol, finds `data/stocks/<TICKER>/` by walking up from the current directory, and writes `combined.csv`.
 
 ## Usage
 
 ```
 cargo run -- <TICKER>
+```
+
+## Pipeline
+
+```
+read eps.csv, ohlcv.csv
+
+// validation
+for each consecutive pair of close prices in ohlcv:
+  ratio = close[i] / close[i-1]
+  if ratio matches any of {0.5, 0.33, 0.25, 0.2, 2, 3, 4, 5} within 3%:
+    error "split detected"
+
+// fill missing eps
+for each row in eps:
+  if ttm_net_eps is empty:
+    ttm_net_eps = stock_price / pe_ratio  // error if either is missing
+
+// merge
+rows = full outer join of ohlcv and eps on date, sorted by date
+       each row: [date, open, high, low, close, volume, ttm_net_eps]
+
+// shift eps up
+for each row where ohlcv fields are all empty and ttm_net_eps is present:
+  prev = last row above with ohlcv data
+  if prev exists and prev.ttm_net_eps is empty:
+    prev.ttm_net_eps = this row's ttm_net_eps
+  drop this row
+
+// interpolate eps
+for each gap of empty ttm_net_eps values:
+  if bounded on both sides by known values:
+    fill linearly between them
+  elif only a prior value exists (trailing gap):
+    forward-fill from last known value
+  else (leading gap — no prior value):
+    leave empty
+
+// pe ratio
+for each row:
+  if ttm_net_eps > 0 or < 0:  pe_ratio = close / ttm_net_eps
+  if ttm_net_eps == 0:         pe_ratio = 0.00
+  if ttm_net_eps is empty:     pe_ratio = empty
+
+write combined.csv
 ```

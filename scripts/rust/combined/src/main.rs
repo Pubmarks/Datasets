@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // merge ohlcv + eps, then forward-fill missing ohlcv rows
     let ohlcv = ohlcv_input;
     let combined = combine::combine_ohlcv_eps(&ohlcv, &eps_output)?;
-    let combined = combine::forward_fill_ohlcv(&combined)?;
+    let combined = combine::shift_above_eps(&combined)?;
     let combined = combine::interpolate_eps(&combined)?;
     let combined = combine::add_pe_ratio(&combined)?;
     let combined_path = dir.join("combined.csv");
