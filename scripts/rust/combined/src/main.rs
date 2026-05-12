@@ -32,9 +32,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // fill missing eps
     let eps_output = eps::fill_missing_eps(&eps_input)?;
-    let eps_temp_path = dir.join("eps_temp.csv");
-    fs::write(&eps_temp_path, &eps_output)?;
-    println!("wrote {}", eps_temp_path.display());
+    // let eps_temp_path = dir.join("eps_temp.csv");
+    // fs::write(&eps_temp_path, &eps_output)?;
+    // println!("wrote {}", eps_temp_path.display());
 
     // merge ohlcv + eps, then forward-fill missing ohlcv rows
     let ohlcv = ohlcv_input;
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let combined = combine::forward_fill_ohlcv(&combined)?;
     let combined = combine::interpolate_eps(&combined)?;
     let combined = combine::add_pe_ratio(&combined)?;
-    let combined_path = dir.join("combined_temp.csv");
+    let combined_path = dir.join("combined.csv");
     fs::write(&combined_path, &combined)?;
     println!("wrote {}", combined_path.display());
 

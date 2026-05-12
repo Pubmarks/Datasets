@@ -104,6 +104,7 @@ pub fn add_pe_ratio(combined: &str) -> Result<String, Box<dyn Error>> {
             record.get(i_eps).and_then(|v| v.parse::<f64>().ok()),
         ) {
             (Some(close), Some(eps)) if eps != 0.0 => format!("{:.2}", close / eps),
+            (_, Some(_)) => "0.00".to_string(),
             _ => String::new(),
         };
         let mut row: Vec<String> = record.iter().map(str::to_string).collect();
@@ -271,12 +272,14 @@ date,open,high,low,close,volume,ttm_net_eps
         let combined = "\
 date,open,high,low,close,volume,ttm_net_eps
 2024-01-01,100,110,90,200.00,1000,4.00
-2024-01-02,100,110,90,150.00,1000,";
+2024-01-02,100,110,90,150.00,1000,0.00
+2024-01-03,100,110,90,150.00,1000,";
 
         let out = add_pe_ratio(combined).unwrap();
         let rows: Vec<&str> = out.trim().lines().collect();
         assert!(rows[1].ends_with(",50.00"), "expected 50.00: {}", rows[1]);
-        assert!(rows[2].ends_with(","), "expected empty pe: {}", rows[2]);
+        assert!(rows[2].ends_with(",0.00"), "expected 0.00 for zero eps: {}", rows[2]);
+        assert!(rows[3].ends_with(","), "expected empty pe for missing eps: {}", rows[3]);
     }
 
     #[test]

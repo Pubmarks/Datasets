@@ -5,25 +5,6 @@ use std::io::Cursor;
 const SPLIT_RATIOS: &[f64] = &[0.5, 1.0 / 3.0, 0.25, 0.2, 2.0, 3.0, 4.0, 5.0];
 const SPLIT_TOLERANCE: f64 = 0.03;
 
-fn check_no_zero_eps(eps: &str) -> Result<(), Box<dyn Error>> {
-    let mut reader = csv::Reader::from_reader(Cursor::new(eps));
-    let headers = reader.headers()?.clone();
-    let ie = headers.iter().position(|c| c == "ttm_net_eps").ok_or("missing ttm_net_eps")?;
-
-    for result in reader.records() {
-        let record = result?;
-        if let Some(val) = record.get(ie) {
-            if let Ok(v) = val.trim().parse::<f64>() {
-                if v == 0.0 {
-                    let date = record.get(0).unwrap_or("unknown");
-                    return Err(format!("zero eps on {date}").into());
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 fn check_no_splits(ohlcv: &str) -> Result<(), Box<dyn Error>> {
     let mut reader = csv::Reader::from_reader(Cursor::new(ohlcv));
     let headers = reader.headers()?.clone();
@@ -48,8 +29,7 @@ fn check_no_splits(ohlcv: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn validate(eps: &str, ohlcv: &str) -> Result<(), Box<dyn Error>> {
-    check_no_zero_eps(eps)?;
+pub fn validate(_eps: &str, ohlcv: &str) -> Result<(), Box<dyn Error>> {
     check_no_splits(ohlcv)?;
     Ok(())
 }
@@ -72,24 +52,6 @@ date,stock_price,ttm_net_eps,pe_ratio
     #[test]
     fn valid_data_passes() {
         assert!(validate(EPS, OHLCV).is_ok());
-    }
-
-    #[test]
-    fn zero_eps_fails() {
-        let eps = "\
-date,stock_price,ttm_net_eps,pe_ratio
-2024-01-01,100,2.50,40.00
-2024-01-02,101,0.00,0.00";
-        assert!(validate(eps, OHLCV).is_err());
-    }
-
-    #[test]
-    fn negative_eps_passes() {
-        let eps = "\
-date,stock_price,ttm_net_eps,pe_ratio
-2024-01-01,100,-2.50,40.00
-2024-01-02,101,-2.51,40.24";
-        assert!(validate(eps, OHLCV).is_ok());
     }
 
     #[test]
