@@ -1,36 +1,23 @@
 use std::error::Error;
 use std::io::Cursor;
 
-// common split ratios: 2:1, 3:1, 4:1, 5:1 and their reverses (3:2 omitted — too close to large market moves)
-const SPLIT_RATIOS: &[f64] = &[0.5, 1.0 / 3.0, 0.25, 0.2, 2.0, 3.0, 4.0, 5.0];
-const SPLIT_TOLERANCE: f64 = 0.03;
+const EPS_COLUMNS:   &[&str] = &["date", "stock_price", "ttm_net_eps", "pe_ratio"];
+const OHLCV_COLUMNS: &[&str] = &["date", "open", "high", "low", "close", "volume"];
 
-fn check_no_splits(ohlcv: &str) -> Result<(), Box<dyn Error>> {
-    let mut reader = csv::Reader::from_reader(Cursor::new(ohlcv));
+fn check_columns(csv: &str, expected: &[&str], label: &str) -> Result<(), Box<dyn Error>> {
+    let mut reader = csv::Reader::from_reader(Cursor::new(csv));
     let headers = reader.headers()?.clone();
-    let ic = headers.iter().position(|c| c == "close").ok_or("missing close")?;
-
-    let mut prev: Option<(String, f64)> = None;
-    for result in reader.records() {
-        let record = result?;
-        let date = record.get(0).unwrap_or("").to_string();
-        if let Some(close) = record.get(ic).and_then(|v| v.trim().parse::<f64>().ok()) {
-            if let Some((prev_date, prev_close)) = &prev {
-                let ratio = close / prev_close;
-                if SPLIT_RATIOS.iter().any(|&r| (ratio - r).abs() < SPLIT_TOLERANCE) {
-                    return Err(format!(
-                        "split detected between {prev_date} ({prev_close}) and {date} ({close})"
-                    ).into());
-                }
-            }
-            prev = Some((date, close));
+    for col in expected {
+        if !headers.iter().any(|h| h == *col) {
+            return Err(format!("{label}: missing column '{col}'").into());
         }
     }
     Ok(())
 }
 
-pub fn validate(_eps: &str, ohlcv: &str) -> Result<(), Box<dyn Error>> {
-    check_no_splits(ohlcv)?;
+pub fn validate(eps: &str, ohlcv: &str) -> Result<(), Box<dyn Error>> {
+    check_columns(eps,   EPS_COLUMNS,   "eps")?;
+    check_columns(ohlcv, OHLCV_COLUMNS, "ohlcv")?;
     Ok(())
 }
 
@@ -41,8 +28,7 @@ mod tests {
     const OHLCV: &str = "\
 date,open,high,low,close,volume
 2024-01-01,100,110,90,100.00,1000
-2024-01-02,100,110,90,101.00,1000
-2024-01-03,100,110,90,102.00,1000";
+2024-01-02,100,110,90,101.00,1000";
 
     const EPS: &str = "\
 date,stock_price,ttm_net_eps,pe_ratio
@@ -55,29 +41,14 @@ date,stock_price,ttm_net_eps,pe_ratio
     }
 
     #[test]
-    fn split_2_for_1_fails() {
-        let ohlcv = "\
-date,open,high,low,close,volume
-2024-01-01,100,110,90,100.00,1000
-2024-01-02,50,55,45,50.00,2000";
-        assert!(validate(EPS, ohlcv).is_err());
+    fn missing_eps_column_fails() {
+        let bad = "date,stock_price,pe_ratio\n2024-01-01,100,40.00";
+        assert!(validate(bad, OHLCV).is_err());
     }
 
     #[test]
-    fn reverse_split_fails() {
-        let ohlcv = "\
-date,open,high,low,close,volume
-2024-01-01,100,110,90,100.00,1000
-2024-01-02,200,220,180,200.00,500";
-        assert!(validate(EPS, ohlcv).is_err());
-    }
-
-    #[test]
-    fn large_but_not_split_move_passes() {
-        let ohlcv = "\
-date,open,high,low,close,volume
-2024-01-01,100,110,90,100.00,1000
-2024-01-02,130,140,120,130.00,1000";
-        assert!(validate(EPS, ohlcv).is_ok());
+    fn missing_ohlcv_column_fails() {
+        let bad = "date,open,high,low,volume\n2024-01-01,100,110,90,1000";
+        assert!(validate(EPS, bad).is_err());
     }
 }

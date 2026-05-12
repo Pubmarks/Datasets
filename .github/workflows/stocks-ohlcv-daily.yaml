@@ -53,6 +53,10 @@ jobs:
           first=true
           for dir in "${dirs[@]}"; do
             ticker=$(basename "$dir" | tr '[:lower:]' '[:upper:]')
+            if git log --since="6 hours ago" --oneline -- "${dir}/ohlcv.csv" ":(glob)${dir}/*/ohlcv.csv" | grep -q .; then
+              echo "Skipping $ticker — committed within last 6 hours"
+              continue
+            fi
             [ "$first" = true ] || sleep 10
             first=false
             echo "--- $ticker ---"

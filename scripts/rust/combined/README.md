@@ -14,10 +14,8 @@ cargo run -- <TICKER>
 read eps.csv, ohlcv.csv
 
 // validation
-for each consecutive pair of close prices in ohlcv:
-  ratio = close[i] / close[i-1]
-  if ratio matches any of {0.5, 0.33, 0.25, 0.2, 2, 3, 4, 5} within 3%:
-    error "split detected"
+if eps is missing any of: date, stock_price, ttm_net_eps, pe_ratio  →  error
+if ohlcv is missing any of: date, open, high, low, close, volume    →  error
 
 // fill missing eps
 for each row in eps:
