@@ -58,7 +58,11 @@ date,open,high,low,close,volume,ttm_net_eps,pe_ratio
         let out = cut_to_last_n_years(COMBINED, 5).unwrap();
         let lines: Vec<&str> = out.trim().lines().collect();
         assert_eq!(lines.len(), 2, "header + 1 row: {out}");
-        assert!(lines[1].starts_with("2023-12-31"), "wrong row kept: {}", lines[1]);
+        assert!(
+            lines[1].starts_with("2023-12-31"),
+            "wrong row kept: {}",
+            lines[1]
+        );
     }
 
     #[test]
@@ -75,6 +79,10 @@ date,open,high,low,close,volume,ttm_net_eps,pe_ratio
 2024-01-01,100,110,90,200.00,1000,,";
         let out = cut_to_last_n_years(combined, 5).unwrap();
         let lines: Vec<&str> = out.trim().lines().collect();
-        assert_eq!(lines.len(), 2, "row with empty pe_ratio should be kept: {out}");
+        assert_eq!(
+            lines.len(),
+            2,
+            "row with empty pe_ratio should be kept: {out}"
+        );
     }
 }

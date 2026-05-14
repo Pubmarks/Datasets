@@ -13,7 +13,7 @@ struct FredResponse {
 
 #[derive(Deserialize)]
 struct Observation {
-    date:  String,
+    date: String,
     value: String,
 }
 
@@ -23,7 +23,7 @@ struct Observation {
 /// amount from `year` to the latest year in this dataset, then multiply it
 /// by the EPS value to get inflation-adjusted (real) EPS.
 pub struct CpiData {
-    by_year:    HashMap<u32, f64>,
+    by_year: HashMap<u32, f64>,
     latest_cpi: f64,
 }
 
@@ -33,8 +33,7 @@ impl CpiData {
     /// Reads `FRED_API_KEY` from the environment — call `dotenvy::dotenv()`
     /// before this if your key lives in a `.env` file.
     pub fn fetch(start_year: u32, end_year: u32) -> Result<Self, Box<dyn Error>> {
-        let api_key = std::env::var("FRED_API_KEY")
-            .map_err(|_| "FRED_API_KEY not set")?;
+        let api_key = std::env::var("FRED_API_KEY").map_err(|_| "FRED_API_KEY not set")?;
 
         let url = format!(
             "{FRED_BASE}?series_id={SERIES_CPI}\
@@ -53,10 +52,7 @@ impl CpiData {
             if obs.value == "." {
                 continue;
             }
-            if let (Ok(year), Ok(cpi)) = (
-                obs.date[..4].parse::<u32>(),
-                obs.value.parse::<f64>(),
-            ) {
+            if let (Ok(year), Ok(cpi)) = (obs.date[..4].parse::<u32>(), obs.value.parse::<f64>()) {
                 by_year.insert(year, cpi);
             }
         }
@@ -66,9 +62,12 @@ impl CpiData {
         }
 
         let latest_year = *by_year.keys().max().unwrap();
-        let latest_cpi  =  by_year[&latest_year];
+        let latest_cpi = by_year[&latest_year];
 
-        Ok(Self { by_year, latest_cpi })
+        Ok(Self {
+            by_year,
+            latest_cpi,
+        })
     }
 
     /// Multiplier that converts a dollar amount from `year` into `latest_year`
@@ -103,18 +102,26 @@ impl CpiData {
         self.by_year.get(&year).copied()
     }
 
-    pub fn latest_cpi(&self) -> f64 { self.latest_cpi }
+    pub fn latest_cpi(&self) -> f64 {
+        self.latest_cpi
+    }
 
     /// Empty instance with no CPI data — `adjust_eps_or_nominal` returns EPS unchanged.
     /// Useful in tests that don't need inflation adjustment.
     pub fn empty() -> Self {
-        Self { by_year: HashMap::new(), latest_cpi: 0.0 }
+        Self {
+            by_year: HashMap::new(),
+            latest_cpi: 0.0,
+        }
     }
 
     /// Build from a known map of year → CPI. Useful in tests.
     pub fn from_map(by_year: HashMap<u32, f64>) -> Self {
         let latest_year = *by_year.keys().max().unwrap_or(&0);
-        let latest_cpi  =  by_year.get(&latest_year).copied().unwrap_or(0.0);
-        Self { by_year, latest_cpi }
+        let latest_cpi = by_year.get(&latest_year).copied().unwrap_or(0.0);
+        Self {
+            by_year,
+            latest_cpi,
+        }
     }
 }

@@ -34,13 +34,15 @@ date,open,high,low,close,volume,ttm_net_eps,pe_ratio
 
     #[test]
     fn missing_date_column_fails() {
-        let bad = "open,high,low,close,volume,ttm_net_eps,pe_ratio\n100,110,90,200.00,1000,4.00,50.00";
+        let bad =
+            "open,high,low,close,volume,ttm_net_eps,pe_ratio\n100,110,90,200.00,1000,4.00,50.00";
         assert!(validate(bad).is_err());
     }
 
     #[test]
     fn missing_pe_ratio_column_fails() {
-        let bad = "date,open,high,low,close,volume,ttm_net_eps\n2024-01-01,100,110,90,200.00,1000,4.00";
+        let bad =
+            "date,open,high,low,close,volume,ttm_net_eps\n2024-01-01,100,110,90,200.00,1000,4.00";
         assert!(validate(bad).is_err());
     }
 }
