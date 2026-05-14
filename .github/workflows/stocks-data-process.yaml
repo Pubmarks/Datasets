@@ -56,27 +56,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Rebuild combined for all tickers
-        run: |
-          set -euo pipefail
-
-          ROOT="data/stocks"
-          if [ ! -d "$ROOT" ]; then
-            echo "No ${ROOT}; nothing to update."
-            exit 0
-          fi
-          mapfile -t dirs < <(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | sort)
-          if [ ${#dirs[@]} -eq 0 ]; then
-            echo "No ticker directories under ${ROOT}; nothing to update."
-            exit 0
-          fi
-
-          for dir in "${dirs[@]}"; do
-            ticker=$(basename "$dir" | tr '[:lower:]' '[:upper:]')
-            echo "--- ${ticker} ---"
-            if ! combined "$ticker" 2>&1; then
-              echo "::warning::${ticker}: combined failed, skipping"
-            fi
-          done
+        run: combined 2>&1
 
       - name: Rebuild avgpe for all tickers
         run: |
