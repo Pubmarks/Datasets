@@ -45,6 +45,12 @@ write avgpe_<N>.json
 | `p_e_min_date` | string | Date of `p_e_min` |
 | `p_e_max` | float (4dp) | Highest positive P/E in the window |
 | `p_e_max_date` | string | Date of `p_e_max` |
+| `p_e_mean` | float (4dp) | Arithmetic mean of positive P/E |
+| `p_e_median` | float (4dp) | Median of positive P/E (true median, averages two middle values for even N) |
+| `p_e_mode` | integer | Most frequent P/E bucket (rounded to nearest whole number; lowest bucket wins ties) |
+| `p_e_mean_lossy` | float (4dp) \| null | Mean of lossy (negative) P/E; null if no loss periods |
+| `p_e_median_lossy` | float (4dp) \| null | Median of lossy P/E; null if no loss periods |
+| `p_e_mode_lossy` | integer \| null | Mode bucket of lossy P/E; null if no loss periods |
 | `p_e_last` | float (4dp) | P/E of the last row (`close / ttm_net_eps`) |
 | `price_last` | float | Last close price |
 | `eps_last` | float | Last TTM net EPS |

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::io::Cursor;
 
@@ -16,6 +17,12 @@ pub struct Stats {
     pub p_e_min_date:       String,
     pub p_e_max:            f64,
     pub p_e_max_date:       String,
+    pub p_e_mean:           f64,
+    pub p_e_median:         f64,
+    pub p_e_mode:           i64,
+    pub p_e_mean_lossy:     Option<f64>,
+    pub p_e_median_lossy:   Option<f64>,
+    pub p_e_mode_lossy:     Option<i64>,
     pub p_e_last:          f64,
     pub price_last:        f64,
     pub eps_last:          f64,
@@ -41,6 +48,8 @@ pub fn compute_stats(cut: &str, ticker: &str) -> Result<Stats, Box<dyn Error>> {
     let mut max_lossy_date: Option<String> = None;
     let mut min_lossy_pe:   Option<f64>    = None;
     let mut min_lossy_date: Option<String> = None;
+    let mut pos_values:   Vec<f64> = Vec::new();
+    let mut lossy_values: Vec<f64> = Vec::new();
     let mut last_pe      = 0f64;
     let mut last_price   = 0f64;
     let mut last_eps     = 0f64;
@@ -62,6 +71,7 @@ pub fn compute_stats(cut: &str, ticker: &str) -> Result<Stats, Box<dyn Error>> {
                 if pe > 0.0 {
                     if pe < min_pe { min_pe = pe; min_date = date.clone(); }
                     if pe > max_pe { max_pe = pe; max_date = date.clone(); }
+                    pos_values.push(pe);
                 } else {
                     // lossy: max_lossy = closest to zero, min_lossy = most negative
                     if max_lossy_pe.map_or(true, |h| pe > h) {
@@ -72,6 +82,7 @@ pub fn compute_stats(cut: &str, ticker: &str) -> Result<Stats, Box<dyn Error>> {
                         min_lossy_pe   = Some(pe);
                         min_lossy_date = Some(date.clone());
                     }
+                    lossy_values.push(pe);
                 }
                 last_pe    = pe;
                 last_price = c;
@@ -89,6 +100,10 @@ pub fn compute_stats(cut: &str, ticker: &str) -> Result<Stats, Box<dyn Error>> {
 
     let round4 = |v: f64| (v * 10000.0).round() / 10000.0;
 
+    let (pos_mean, pos_median, pos_mode) =
+        distribution(&mut pos_values).expect("already validated non-empty");
+    let lossy_dist = distribution(&mut lossy_values);
+
     Ok(Stats {
         ticker: ticker.to_string(),
         start_date,
@@ -101,10 +116,39 @@ pub fn compute_stats(cut: &str, ticker: &str) -> Result<Stats, Box<dyn Error>> {
         p_e_min_date:       min_date,
         p_e_max:            round4(max_pe),
         p_e_max_date:       max_date,
+        p_e_mean:           round4(pos_mean),
+        p_e_median:         round4(pos_median),
+        p_e_mode:           pos_mode,
+        p_e_mean_lossy:     lossy_dist.map(|(mean, _, _)| round4(mean)),
+        p_e_median_lossy:   lossy_dist.map(|(_, med, _)| round4(med)),
+        p_e_mode_lossy:     lossy_dist.map(|(_, _, mode)| mode),
         p_e_last:          round4(last_pe),
         price_last:        last_price,
         eps_last:          last_eps,
     })
+}
+
+fn distribution(values: &mut Vec<f64>) -> Option<(f64, f64, i64)> {
+    if values.is_empty() { return None; }
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let n = values.len();
+    let median = if n % 2 == 1 {
+        values[n / 2]
+    } else {
+        (values[n / 2 - 1] + values[n / 2]) / 2.0
+    };
+    let mut counts: HashMap<i64, usize> = HashMap::new();
+    for &v in values.iter() {
+        *counts.entry(v.round() as i64).or_insert(0) += 1;
+    }
+    let max_count = *counts.values().max().unwrap();
+    let mode = *counts.iter()
+        .filter(|&(_, &c)| c == max_count)
+        .map(|(k, _)| k)
+        .min()
+        .unwrap();
+    Some((mean, median, mode))
 }
 
 #[cfg(test)]
@@ -194,5 +238,71 @@ date,open,high,low,close,volume,ttm_net_eps,pe_ratio
     fn ticker_name_is_stored() {
         let s = compute_stats(CUT, "NVDA").unwrap();
         assert_eq!(s.ticker, "NVDA");
+    }
+
+    #[test]
+    fn mean_median_mode_positive_band() {
+        let s = compute_stats(CUT, "TEST").unwrap();
+        // pe values: 100.0, 21.0, 60.0, 62.5
+        // mean = 243.5 / 4 = 60.875
+        assert_eq!(s.p_e_mean, 60.875);
+        // sorted: 21, 60, 62.5, 100 → even N → (60 + 62.5) / 2 = 61.25
+        assert_eq!(s.p_e_median, 61.25);
+        // buckets: 100→100, 21→21, 60→60, 63→63 → all tie at 1; lowest = 21
+        assert_eq!(s.p_e_mode, 21);
+    }
+
+    #[test]
+    fn mode_tie_lowest_bucket_wins() {
+        let cut = "\
+date,open,high,low,close,volume,ttm_net_eps,pe_ratio
+2021-01-01,0,0,0,30.00,0,1.00,
+2021-01-02,0,0,0,30.50,0,1.00,
+2021-01-03,0,0,0,50.00,0,1.00,
+2021-01-04,0,0,0,50.50,0,1.00,";
+        // pe values: 30.0, 30.5, 50.0, 50.5
+        // buckets: 30→2 (30.0 and 30.5 both round to 30), 50→2 (50.0→50, 50.5→51)
+        // wait: 30.0→30, 30.5→31, 50.0→50, 50.5→51 → all tie; lowest = 30
+        let s = compute_stats(cut, "TEST").unwrap();
+        assert_eq!(s.p_e_mode, 30);
+    }
+
+    #[test]
+    fn mode_clear_winner() {
+        let cut = "\
+date,open,high,low,close,volume,ttm_net_eps,pe_ratio
+2021-01-01,0,0,0,20.00,0,1.00,
+2021-01-02,0,0,0,20.30,0,1.00,
+2021-01-03,0,0,0,20.60,0,1.00,
+2021-01-04,0,0,0,50.00,0,1.00,";
+        // pe: 20.0→20, 20.3→20, 20.6→21, 50.0→50 → bucket 20 wins with count 2
+        let s = compute_stats(cut, "TEST").unwrap();
+        assert_eq!(s.p_e_mode, 20);
+    }
+
+    #[test]
+    fn no_lossy_rows_gives_none_distribution() {
+        let s = compute_stats(CUT, "TEST").unwrap();
+        assert_eq!(s.p_e_mean_lossy,   None);
+        assert_eq!(s.p_e_median_lossy, None);
+        assert_eq!(s.p_e_mode_lossy,   None);
+    }
+
+    #[test]
+    fn lossy_band_distribution() {
+        let cut = "\
+date,open,high,low,close,volume,ttm_net_eps,pe_ratio
+2021-01-01,0,0,0,100.00,0,-2.00,
+2021-01-02,0,0,0,100.00,0,-2.00,
+2021-01-03,0,0,0,100.00,0,-5.00,
+2022-01-01,0,0,0,100.00,0,5.00,";
+        // lossy pe: -50.0, -50.0, -20.0
+        // mean = -120 / 3 = -40.0
+        // sorted: -50, -50, -20 → median = -50.0 (middle of 3)
+        // buckets: -50→2, -20→1 → mode = -50
+        let s = compute_stats(cut, "TEST").unwrap();
+        assert_eq!(s.p_e_mean_lossy,   Some(-40.0));
+        assert_eq!(s.p_e_median_lossy, Some(-50.0));
+        assert_eq!(s.p_e_mode_lossy,   Some(-50));
     }
 }
