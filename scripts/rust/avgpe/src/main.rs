@@ -1,4 +1,5 @@
 mod cut;
+mod cpi;
 mod stats;
 mod validate;
 
@@ -6,8 +7,12 @@ use std::env;
 use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use chrono::{Datelike, Local};
 use rayon::prelude::*;
+
+use cpi::CpiData;
 
 fn find_stocks_dir() -> Option<PathBuf> {
     let mut dir = env::current_dir().ok()?;
@@ -22,7 +27,7 @@ fn find_stocks_dir() -> Option<PathBuf> {
     }
 }
 
-fn process_ticker(ticker_dir: &PathBuf, years: u32) -> Result<String, String> {
+fn process_ticker(ticker_dir: &PathBuf, years: u32, cpi: &CpiData) -> Result<String, String> {
     let ticker = ticker_dir
         .file_name()
         .and_then(|n| n.to_str())
@@ -40,7 +45,7 @@ fn process_ticker(ticker_dir: &PathBuf, years: u32) -> Result<String, String> {
     // fs::write(&cut_path, &cut)
     //     .map_err(|e| format!("{ticker}: {e}"))?;
 
-    let stats = stats::compute_stats(&cut, &ticker)
+    let stats = stats::compute_stats(&cut, &ticker, cpi)
         .map_err(|e| format!("{ticker}: {e}"))?;
     let json = serde_json::to_string_pretty(&stats)
         .map_err(|e| format!("{ticker}: {e}"))?;
@@ -53,11 +58,16 @@ fn process_ticker(ticker_dir: &PathBuf, years: u32) -> Result<String, String> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    dotenvy::dotenv().ok(); // load .env if present; ignore if missing
+
     let years: u32 = env::args()
         .nth(1)
         .ok_or("Usage: avgpe <YEARS>")?
         .parse()
         .map_err(|_| "YEARS must be a positive integer")?;
+
+    let current_year = Local::now().year() as u32;
+    let cpi = Arc::new(CpiData::fetch(current_year.saturating_sub(years), current_year)?);
 
     let stocks_dir = find_stocks_dir().ok_or("could not find data/stocks/")?;
 
@@ -73,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .build()?;
 
     let results: Vec<Result<String, String>> = pool.install(|| {
-        ticker_dirs.par_iter().map(|d| process_ticker(d, years)).collect()
+        ticker_dirs.par_iter().map(|d| process_ticker(d, years, &cpi)).collect()
     });
 
     let mut errors = 0usize;
