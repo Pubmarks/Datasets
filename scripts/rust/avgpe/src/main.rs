@@ -1,4 +1,5 @@
 mod cut;
+mod stats;
 mod validate;
 
 use std::env;
@@ -22,16 +23,33 @@ fn find_stocks_dir() -> Option<PathBuf> {
 }
 
 fn process_ticker(ticker_dir: &PathBuf, years: u32) -> Result<String, String> {
+    let ticker = ticker_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("UNKNOWN")
+        .to_string();
+
     let combined = fs::read_to_string(ticker_dir.join("combined.csv"))
-        .map_err(|e| format!("{}: {e}", ticker_dir.display()))?;
+        .map_err(|e| format!("{ticker}: {e}"))?;
     validate::validate(&combined)
-        .map_err(|e| format!("{}: {e}", ticker_dir.display()))?;
+        .map_err(|e| format!("{ticker}: {e}"))?;
     let cut = cut::cut_to_last_n_years(&combined, years)
-        .map_err(|e| format!("{}: {e}", ticker_dir.display()))?;
-    let out_path = ticker_dir.join("avgpe_cut.csv");
-    fs::write(&out_path, &cut)
-        .map_err(|e| format!("{}: {e}", ticker_dir.display()))?;
-    Ok(format!("wrote {}", out_path.display()))
+        .map_err(|e| format!("{ticker}: {e}"))?;
+
+    // let cut_path = ticker_dir.join("avgpe_cut.csv");
+    // fs::write(&cut_path, &cut)
+    //     .map_err(|e| format!("{ticker}: {e}"))?;
+
+    let stats = stats::compute_stats(&cut, &ticker)
+        .map_err(|e| format!("{ticker}: {e}"))?;
+    let json = serde_json::to_string_pretty(&stats)
+        .map_err(|e| format!("{ticker}: {e}"))?;
+    let json_path = ticker_dir.join("avgpe.json");
+    fs::write(&json_path, json + "\n")
+        .map_err(|e| format!("{ticker}: {e}"))?;
+
+    Ok(format!("wrote {json_path_display}",
+        json_path_display = json_path.display()))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {

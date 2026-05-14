@@ -1,0 +1,12 @@
+{
+    "ticker": "TSLA",
+    "start_date": "2021-04-16",
+    "end_date": "2026-04-16",
+    "p_e_min": 29.8619,
+    "p_e_min_date": "2023-01-03",
+    "p_e_max": 751.6364,
+    "p_e_max_date": "2021-04-21",
+    "p_e_last": 360.0926,
+    "price_last": 388.9,
+    "eps_last": 1.08
+}
