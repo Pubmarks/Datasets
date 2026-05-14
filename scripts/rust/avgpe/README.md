@@ -1,0 +1,25 @@
+# avgpe
+
+Reads `data/stocks/<TICKER>/combined.csv` and writes `avgpe_cut.csv`
+containing only the last N years of rows.
+
+## Usage
+
+```
+cargo run -- <TICKER> <YEARS>
+```
+
+## Pipeline
+
+```
+read combined.csv
+
+// validation
+if combined is missing any of: date, pe_ratio  →  error
+
+// cut
+cutoff = today - YEARS (same month/day, N years prior)
+keep rows where date >= cutoff
+
+write avgpe_cut.csv
+```
