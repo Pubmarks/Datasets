@@ -1,12 +1,13 @@
 # avgpe
 
-Reads `data/stocks/<TICKER>/combined.csv` and writes `avgpe_cut.csv`
-containing only the last N years of rows.
+Reads every `data/stocks/<TICKER>/combined.csv` and writes `avgpe_cut.csv`
+containing only the last N years of rows. All tickers are processed in
+parallel (10 at a time).
 
 ## Usage
 
 ```
-cargo run -- <TICKER> <YEARS>
+cargo run -- <YEARS>
 ```
 
 ## Pipeline

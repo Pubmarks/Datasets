@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 csv = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+rayon = "1"
