@@ -25,7 +25,7 @@ cutoff = today - YEARS (same month/day, N years prior)
 keep rows where date >= cutoff
 
 // stats
-compute low/high P/E for positive band, high_neg/low_neg for loss periods
+compute min/max P/E for positive band, min_lossy/max_lossy for loss periods
 
 write avgpe_<N>.json
 ```
@@ -37,14 +37,14 @@ write avgpe_<N>.json
 | `ticker` | string | Ticker symbol |
 | `start_date` | string | First date in the cut window |
 | `end_date` | string | Last date in the cut window |
-| `p_e_high_neg` | float (4dp) \| null | Highest negative P/E (closest to zero); null if no loss periods |
-| `p_e_high_neg_date` | string \| null | Date of `p_e_high_neg` |
-| `p_e_low_neg` | float (4dp) \| null | Lowest negative P/E (most negative); null if no loss periods |
-| `p_e_low_neg_date` | string \| null | Date of `p_e_low_neg` |
-| `p_e_low` | float (4dp) | Lowest positive P/E in the window |
-| `p_e_low_date` | string | Date of `p_e_low` |
-| `p_e_high` | float (4dp) | Highest positive P/E in the window |
-| `p_e_high_date` | string | Date of `p_e_high` |
+| `p_e_max_lossy` | float (4dp) \| null | Highest negative P/E (closest to zero); null if no loss periods |
+| `p_e_max_lossy_date` | string \| null | Date of `p_e_max_lossy` |
+| `p_e_min_lossy` | float (4dp) \| null | Lowest negative P/E (most negative); null if no loss periods |
+| `p_e_min_lossy_date` | string \| null | Date of `p_e_min_lossy` |
+| `p_e_min` | float (4dp) | Lowest positive P/E in the window |
+| `p_e_min_date` | string | Date of `p_e_min` |
+| `p_e_max` | float (4dp) | Highest positive P/E in the window |
+| `p_e_max_date` | string | Date of `p_e_max` |
 | `p_e_last` | float (4dp) | P/E of the last row (`close / ttm_net_eps`) |
 | `price_last` | float | Last close price |
 | `eps_last` | float | Last TTM net EPS |
