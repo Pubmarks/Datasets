@@ -1,0 +1,60 @@
+name: pubmarks/avgpe build and release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/rust/avgpe/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Get previous tag
+        id: previoustag
+        run: |
+          tag=$(gh api "repos/${{ github.repository }}/tags" --jq \
+            '[.[] | select(.name | startswith("avgpe-"))] | .[0].name // "avgpe-0.0.0"' \
+            2>/dev/null || echo "avgpe-0.0.0")
+          version="${tag#avgpe-}"
+          echo "tag=$version" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get next patch version
+        id: semvers
+        uses: WyriHaximus/github-action-next-semvers@v1
+        with:
+          version: ${{ steps.previoustag.outputs.tag }}
+
+      - name: Build
+        working-directory: scripts/rust/avgpe
+        run: |
+          cargo build --release
+          mkdir -p ../../../out
+          mv target/release/avgpe ../../../out/avgpe
+
+      - name: Create release
+        id: create-release
+        uses: softprops/action-gh-release@v2.0.8
+        with:
+          draft: false
+          fail_on_unmatched_files: true
+          files: out/avgpe
+          generate_release_notes: true
+          prerelease: false
+          tag_name: "avgpe-${{ steps.semvers.outputs.patch }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

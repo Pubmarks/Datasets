@@ -3,7 +3,7 @@ name: Update README table
 on:
   workflow_run:
     workflows:
-      - Stocks combined update
+      - Stocks Data Process
     types:
       - completed
   workflow_dispatch:

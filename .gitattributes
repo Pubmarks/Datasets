@@ -1,3 +1,4 @@
 data/stocks/*/ohlcv.csv filter=lfs diff=lfs merge=lfs -text
 data/stocks/*/eps.csv filter=lfs diff=lfs merge=lfs -text
 data/stocks/*/combined.csv filter=lfs diff=lfs merge=lfs -text
+data/stocks/*/avgpe_*.json filter=lfs diff=lfs merge=lfs -text
