@@ -1,4 +1,4 @@
-name: Stocks combined update
+name: Stocks Data Process
 
 on:
   workflow_run:
@@ -42,11 +42,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download latest avgpe release
+        run: |
+          gh release download \
+            $(gh release list --repo ${{ github.repository }} \
+              --json tagName \
+              --jq '[.[] | select(.tagName | startswith("avgpe-"))] | .[0].tagName') \
+            --repo ${{ github.repository }} \
+            --pattern 'avgpe' \
+            --output /usr/local/bin/avgpe
+          chmod +x /usr/local/bin/avgpe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Rebuild combined for all tickers
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           ROOT="data/stocks"
           if [ ! -d "$ROOT" ]; then
@@ -67,11 +78,29 @@ jobs:
             fi
           done
 
-          git add "${ROOT}"
+      - name: Rebuild avgpe for all tickers
+        run: |
+          set -euo pipefail
+          for years in 5 10; do
+            echo "=== avgpe ${years} ==="
+            if ! avgpe "$years" 2>&1; then
+              echo "::warning::avgpe ${years} failed"
+            fi
+          done
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+
+      - name: Commit and push changes
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/stocks
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "chore: combined update"
+            git commit -m "chore: stocks process data"
             git pull --rebase origin main
             git push
           fi
