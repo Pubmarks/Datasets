@@ -1,12 +1,16 @@
 {
     "ticker": "TSLA",
-    "start_date": "2021-04-16",
-    "end_date": "2026-04-16",
-    "p_e_min": 29.8619,
-    "p_e_min_date": "2023-01-03",
-    "p_e_max": 751.6364,
-    "p_e_max_date": "2021-04-21",
-    "p_e_last": 360.0926,
-    "price_last": 388.9,
-    "eps_last": 1.08
+    "start_date": "2021-05-14",
+    "end_date": "2026-05-13",
+    "p_e_high_neg": null,
+    "p_e_high_neg_date": null,
+    "p_e_low_neg": null,
+    "p_e_low_neg_date": null,
+    "p_e_low": 29.8619,
+    "p_e_low_date": "2023-01-03",
+    "p_e_high": 441.2727,
+    "p_e_high_date": "2025-12-24",
+    "p_e_last": 408.5046,
+    "price_last": 445.27,
+    "eps_last": 1.09
 }

@@ -44,7 +44,7 @@ fn process_ticker(ticker_dir: &PathBuf, years: u32) -> Result<String, String> {
         .map_err(|e| format!("{ticker}: {e}"))?;
     let json = serde_json::to_string_pretty(&stats)
         .map_err(|e| format!("{ticker}: {e}"))?;
-    let json_path = ticker_dir.join("avgpe.json");
+    let json_path = ticker_dir.join(format!("avgpe_{years}.json"));
     fs::write(&json_path, json + "\n")
         .map_err(|e| format!("{ticker}: {e}"))?;
 
