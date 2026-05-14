@@ -8,7 +8,8 @@ const SERIES_CPI: &str = "CPIAUCSL";
 
 #[derive(Deserialize)]
 struct FredResponse {
-    observations: Vec<Observation>,
+    observations: Option<Vec<Observation>>,
+    error_message: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -46,8 +47,12 @@ impl CpiData {
 
         let resp: FredResponse = reqwest::blocking::get(&url)?.json()?;
 
+        if let Some(msg) = resp.error_message {
+            return Err(format!("FRED error: {msg}").into());
+        }
+
         let mut by_year: HashMap<u32, f64> = HashMap::new();
-        for obs in &resp.observations {
+        for obs in resp.observations.as_deref().unwrap_or(&[]) {
             // FRED uses "." for missing values
             if obs.value == "." {
                 continue;
@@ -70,23 +75,6 @@ impl CpiData {
         })
     }
 
-    /// Multiplier that converts a dollar amount from `year` into `latest_year`
-    /// dollars.  Returns `None` if CPI for `year` is not in the dataset.
-    ///
-    /// ```
-    /// // real_eps = nominal_eps * cpi.adjustment_factor(eps_year)?
-    /// ```
-    pub fn adjustment_factor(&self, year: u32) -> Option<f64> {
-        let base = self.by_year.get(&year)?;
-        Some(self.latest_cpi / base)
-    }
-
-    /// Adjust a nominal EPS from `year` to the latest year's dollars.
-    /// Returns `None` if CPI for `year` is not in the dataset.
-    pub fn adjust_eps(&self, eps: f64, year: u32) -> Option<f64> {
-        Some(eps * self.adjustment_factor(year)?)
-    }
-
     /// Adjust a nominal EPS from `year` to the latest year's dollars.
     /// Falls back to the raw EPS unchanged when the year has no CPI entry
     /// (e.g. the current calendar year whose annual average isn't published yet).
@@ -97,17 +85,8 @@ impl CpiData {
         }
     }
 
-    /// Raw CPI value for a given year, if present.
-    pub fn cpi_for_year(&self, year: u32) -> Option<f64> {
-        self.by_year.get(&year).copied()
-    }
-
-    pub fn latest_cpi(&self) -> f64 {
-        self.latest_cpi
-    }
-
     /// Empty instance with no CPI data — `adjust_eps_or_nominal` returns EPS unchanged.
-    /// Useful in tests that don't need inflation adjustment.
+    #[cfg(test)]
     pub fn empty() -> Self {
         Self {
             by_year: HashMap::new(),
@@ -115,7 +94,7 @@ impl CpiData {
         }
     }
 
-    /// Build from a known map of year → CPI. Useful in tests.
+    #[cfg(test)]
     pub fn from_map(by_year: HashMap<u32, f64>) -> Self {
         let latest_year = *by_year.keys().max().unwrap_or(&0);
         let latest_cpi = by_year.get(&latest_year).copied().unwrap_or(0.0);

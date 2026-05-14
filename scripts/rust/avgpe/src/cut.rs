@@ -7,9 +7,15 @@ pub fn cut_to_last_n_years(combined: &str, years: u32) -> Result<String, Box<dyn
     let today = Local::now().date_naive();
     let cutoff_year = today.year() - years as i32;
     // chrono handles the Feb-29 edge case: falls back to Feb-28 on non-leap years
+    // Feb-29 on a non-leap target year → fall back to Feb-28
     let cutoff = today
         .with_year(cutoff_year)
-        .unwrap_or_else(|| today.with_year(cutoff_year).expect("invalid cutoff date"));
+        .unwrap_or_else(|| {
+            today
+                .with_day(28)
+                .and_then(|d| d.with_year(cutoff_year))
+                .expect("invalid cutoff date")
+        });
     let cutoff_str = cutoff.format("%Y-%m-%d").to_string();
 
     let mut reader = csv::Reader::from_reader(Cursor::new(combined));

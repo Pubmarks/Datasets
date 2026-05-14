@@ -1,21 +1,15 @@
 use std::error::Error;
 use std::io::Cursor;
 
-const COMBINED_COLUMNS: &[&str] = &["date", "pe_ratio"];
-
-fn check_columns(csv: &str, expected: &[&str], label: &str) -> Result<(), Box<dyn Error>> {
-    let mut reader = csv::Reader::from_reader(Cursor::new(csv));
+pub fn validate(combined: &str) -> Result<(), Box<dyn Error>> {
+    let mut reader = csv::Reader::from_reader(Cursor::new(combined));
     let headers = reader.headers()?.clone();
-    for col in expected {
-        if !headers.iter().any(|h| h == *col) {
-            return Err(format!("{label}: missing column '{col}'").into());
+    for col in ["date", "pe_ratio"] {
+        if !headers.iter().any(|h| h == col) {
+            return Err(format!("combined: missing column '{col}'").into());
         }
     }
     Ok(())
-}
-
-pub fn validate(combined: &str) -> Result<(), Box<dyn Error>> {
-    check_columns(combined, COMBINED_COLUMNS, "combined")
 }
 
 #[cfg(test)]
