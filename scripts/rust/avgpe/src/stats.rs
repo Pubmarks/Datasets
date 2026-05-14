@@ -11,23 +11,24 @@ pub struct Stats {
     pub ticker: String,
     pub start_date: String,
     pub end_date: String,
-    pub p_e_max_lossy: Option<f64>,
-    pub p_e_max_lossy_date: Option<String>,
-    pub p_e_min_lossy: Option<f64>,
-    pub p_e_min_lossy_date: Option<String>,
-    pub p_e_min: f64,
-    pub p_e_min_date: String,
-    pub p_e_max: f64,
-    pub p_e_max_date: String,
-    pub p_e_mean: f64,
-    pub p_e_median: f64,
-    pub p_e_mode: i64,
-    pub p_e_mean_lossy: Option<f64>,
-    pub p_e_median_lossy: Option<f64>,
-    pub p_e_mode_lossy: Option<i64>,
+    pub eps_last: f64,
     pub p_e_last: f64,
     pub price_last: f64,
-    pub eps_last: f64,
+    pub p_e_harmonic: Option<f64>,
+    pub p_e_max_date: String,
+    pub p_e_max_lossy_date: Option<String>,
+    pub p_e_max_lossy: Option<f64>,
+    pub p_e_max: f64,
+    pub p_e_mean_lossy: Option<f64>,
+    pub p_e_mean: f64,
+    pub p_e_median_lossy: Option<f64>,
+    pub p_e_median: f64,
+    pub p_e_min_date: String,
+    pub p_e_min_lossy_date: Option<String>,
+    pub p_e_min_lossy: Option<f64>,
+    pub p_e_min: f64,
+    pub p_e_mode_lossy: Option<i64>,
+    pub p_e_mode: i64,
     pub p_e_shiller: Option<f64>,
 }
 
@@ -62,6 +63,7 @@ pub fn compute_stats(cut: &str, ticker: &str, cpi: &CpiData) -> Result<Stats, Bo
     let mut min_lossy_date: Option<String> = None;
     let mut pos_values: Vec<f64> = Vec::new();
     let mut lossy_values: Vec<f64> = Vec::new();
+    let mut ep_values: Vec<f64> = Vec::new();
     // year → last EPS seen in that year (year-end value wins via overwrite)
     let mut year_end_eps: HashMap<u32, f64> = HashMap::new();
     let mut last_pe = 0f64;
@@ -108,6 +110,7 @@ pub fn compute_stats(cut: &str, ticker: &str, cpi: &CpiData) -> Result<Stats, Bo
                 if let Ok(year) = date[..4].parse::<u32>() {
                     year_end_eps.insert(year, e);
                 }
+                ep_values.push(e / c);
                 last_pe = pe;
                 last_price = c;
                 last_eps = e;
@@ -139,6 +142,17 @@ pub fn compute_stats(cut: &str, ticker: &str, cpi: &CpiData) -> Result<Stats, Bo
         }
     };
 
+    let p_e_harmonic = if ep_values.is_empty() {
+        None
+    } else {
+        let mean_ep = ep_values.iter().sum::<f64>() / ep_values.len() as f64;
+        if mean_ep != 0.0 {
+            Some(round4(1.0 / mean_ep))
+        } else {
+            None
+        }
+    };
+
     let (pos_mean, pos_median, pos_mode) =
         distribution(&mut pos_values).expect("already validated non-empty");
     let lossy_dist = distribution(&mut lossy_values);
@@ -164,6 +178,7 @@ pub fn compute_stats(cut: &str, ticker: &str, cpi: &CpiData) -> Result<Stats, Bo
         p_e_mode_lossy: lossy_dist.map(|(_, _, mode)| mode),
         p_e_last: round4(last_pe),
         p_e_shiller,
+        p_e_harmonic,
         price_last: last_price,
     })
 }
@@ -353,6 +368,16 @@ date,open,high,low,close,volume,ttm_net_eps,pe_ratio
         assert_eq!(s.p_e_mean_lossy, Some(-40.0));
         assert_eq!(s.p_e_median_lossy, Some(-50.0));
         assert_eq!(s.p_e_mode_lossy, Some(-50));
+    }
+
+    #[test]
+    fn p_e_harmonic_is_inverse_of_mean_ep() {
+        // CUT: pe values 100.0, 21.0, 60.0, 62.5
+        // E/P values: 2/200=0.01, 5/105=0.047619, 3/180=0.016667, 4/250=0.016
+        // mean(E/P) = (0.01 + 0.047619 + 0.016667 + 0.016) / 4 = 0.090286 / 4 = 0.022571
+        // p_e_harmonic = 1 / 0.022571 = 44.3068
+        let s = compute_stats(CUT, "TEST", &no_cpi()).unwrap();
+        assert_eq!(s.p_e_harmonic, Some(44.3038));
     }
 
     #[test]

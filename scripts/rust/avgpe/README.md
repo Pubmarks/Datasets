@@ -49,6 +49,9 @@ for each data/stocks/<TICKER>/combined.csv:
     p_e_median = median(pos_values)
     p_e_mode   = most-frequent rounded bucket; lowest bucket wins ties
 
+    // harmonic mean P/E (all non-zero EPS rows, both signs)
+    p_e_harmonic = 1 / mean(eps / close for each row where eps != 0)
+
     // distribution (lossy band) — null if no loss rows
     p_e_mean_lossy / p_e_median_lossy / p_e_mode_lossy
 
@@ -91,6 +94,7 @@ See `shape.json` for a live example. Field reference:
 | `p_e_mode_lossy` | integer \| null | Mode bucket of lossy P/E; null if no loss periods |
 | `p_e_last` | float (4dp) | P/E of the last row (`close / ttm_net_eps`) |
 | `p_e_shiller` | float (4dp) \| null | Shiller P/E (CAPE): `last_price / avg_real_eps` across N years |
+| `p_e_harmonic` | float (4dp) \| null | Harmonic mean P/E: `1 / mean(EPS/price)` across all daily rows; less sensitive to near-zero EPS blowup than `p_e_mean` |
 | `price_last` | float | Last close price |
 
 ### Shiller P/E notes
