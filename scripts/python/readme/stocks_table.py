@@ -39,11 +39,33 @@ def build_rows(data_root: Path) -> list[str]:
         ticker = ticker_dir.name.upper()
         ohlcv_url = f"{CDN_BASE}/{ticker_dir.name}/ohlcv.csv"
         eps_url = f"{CDN_BASE}/{ticker_dir.name}/eps.csv"
+        combined_url = f"{CDN_BASE}/{ticker_dir.name}/combined.csv"
+        avgpe5_url = f"{CDN_BASE}/{ticker_dir.name}/avgpe_5.json"
+        avgpe10_url = f"{CDN_BASE}/{ticker_dir.name}/avgpe_10.json"
+
         ohlcv_label = _year_range(ticker_dir, "ohlcv.csv") or "—"
         eps_label = _year_range(ticker_dir, "eps.csv")
+        combined_label = _year_range(ticker_dir, "ohlcv.csv") or "—"
+
         ohlcv_cell = f"[{ohlcv_label}]({ohlcv_url})"
         eps_cell = f"[{eps_label}]({eps_url})" if eps_label else "—"
-        rows.append(f"| {ticker} | {ohlcv_cell} | {eps_cell} |")
+
+        has_combined = (ticker_dir / "combined.csv").exists()
+        combined_cell = f"[{combined_label}]({combined_url})" if has_combined else "—"
+
+        has_avgpe5 = (ticker_dir / "avgpe_5.json").exists()
+        has_avgpe10 = (ticker_dir / "avgpe_10.json").exists()
+        if has_avgpe5 or has_avgpe10:
+            parts = []
+            if has_avgpe5:
+                parts.append(f"[5yr]({avgpe5_url})")
+            if has_avgpe10:
+                parts.append(f"[10yr]({avgpe10_url})")
+            avgpe_cell = " ".join(parts)
+        else:
+            avgpe_cell = "—"
+
+        rows.append(f"| {ticker} | {ohlcv_cell} | {eps_cell} | {combined_cell} | {avgpe_cell} |")
     return rows
 
 
@@ -75,7 +97,7 @@ def update_readme(readme: Path, rows: list[str]) -> None:
     while k < len(lines) and lines[k].lstrip().startswith("|"):
         k += 1
 
-    header = ["| Ticker | OHLCV | EPS |\n", "| ------ | ----- | --- |\n"]
+    header = ["| Ticker | OHLCV | EPS | Combined | Avg P/E |\n", "| ------ | ----- | --- | -------- | ------- |\n"]
     body = [r + "\n" for r in rows]
 
     if not table_found and j > 0 and lines[j - 1].strip() != "":
